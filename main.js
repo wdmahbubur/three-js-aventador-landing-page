@@ -339,8 +339,172 @@ function setupModel(gltf) {
     }
   });
 
+  // split merged doors + build door/hood/engine pivots
+  buildMovingParts();
+
   setPaint(DEFAULT_PAINT);
   modelReady = true;
+}
+
+/* ------------------------------------------------------------
+   Moving parts — scissor doors, front hood, engine cover
+   ------------------------------------------------------------ */
+const DOOR_OPEN = THREE.MathUtils.degToRad(68);     // scissor-door swing
+const HOOD_OPEN = THREE.MathUtils.degToRad(55);     // front frunk lid
+const ENGINE_OPEN = THREE.MathUtils.degToRad(60);   // rear engine louvres
+
+const MOVING = {
+  doors: { target: 0, current: 0 },
+  hood: { target: 0, current: 0 },
+  engine: { target: 0, current: 0 },
+};
+
+let doorPivotL = null, doorPivotR = null, hoodPivot = null, enginePivot = null;
+
+// The two scissor doors are exported merged into single meshes (both sides in
+// one geometry). Split each door mesh at the car centreline (world Z = 0) into
+// a left (+Z) and right (−Z) half, baking world-space vertices so the halves
+// can be pivoted independently around their own hinges.
+function splitMeshByWorldZ(mesh) {
+  const g = mesh.geometry;
+  if (!g || !g.attributes.position) return null;
+  const pos = g.attributes.position, idx = g.index;
+  const tmp = new THREE.Vector3();
+  const wZ = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) {
+    tmp.fromBufferAttribute(pos, i).applyMatrix4(mesh.matrixWorld);
+    wZ[i] = tmp.z;
+  }
+  const L = [], R = [];
+  const tz = (a, b, c) => (wZ[a] + wZ[b] + wZ[c]) / 3;
+  if (idx) {
+    for (let i = 0; i < idx.count; i += 3) {
+      const a = idx.getX(i), b = idx.getX(i + 1), c = idx.getX(i + 2);
+      const z = tz(a, b, c);
+      if (z > 0.005) L.push(a, b, c); else if (z < -0.005) R.push(a, b, c);
+    }
+  } else {
+    for (let i = 0; i < pos.count; i += 3) {
+      const z = tz(i, i + 1, i + 2);
+      if (z > 0.005) L.push(i, i + 1, i + 2); else if (z < -0.005) R.push(i, i + 1, i + 2);
+    }
+  }
+  const build = (tris) => {
+    if (!tris.length) return null;
+    const map = new Map();
+    const op = [], on = [], ou = [], oi = [];
+    const na = g.attributes.normal, ua = g.attributes.uv;
+    for (const vi of tris) {
+      let ni = map.get(vi);
+      if (ni === undefined) {
+        ni = map.size; map.set(vi, ni);
+        tmp.fromBufferAttribute(pos, vi); op.push(tmp.x, tmp.y, tmp.z);
+        if (na) { tmp.fromBufferAttribute(na, vi); on.push(tmp.x, tmp.y, tmp.z); }
+        if (ua) ou.push(ua.getX(vi), ua.getY(vi));
+      }
+      oi.push(ni);
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(op, 3));
+    if (na) geo.setAttribute('normal', new THREE.Float32BufferAttribute(on, 3));
+    if (ua) geo.setAttribute('uv', new THREE.Float32BufferAttribute(ou, 2));
+    geo.setIndex(oi);
+    return geo;
+  };
+  return { left: build(L), right: build(R) };
+}
+
+function boxOfMeshes(meshes) {
+  const b = new THREE.Box3();
+  for (const m of meshes) { m.geometry.computeBoundingBox(); b.union(m.geometry.boundingBox); }
+  return b;
+}
+
+function buildMovingParts() {
+  car.updateMatrixWorld(true);
+
+  // ---- doors (scissor) ----
+  const doorMeshNames = new Set(['Mesh_Door_LH', 'Mesh_Door_LH_1', 'Mesh_Door_LH_2']);
+  const leftPieces = [], rightPieces = [];
+  const removals = [];
+
+  car.traverse(o => {
+    if (o.isMesh && doorMeshNames.has(o.name)) {
+      const s = splitMeshByWorldZ(o);
+      if (s.left) { const m = new THREE.Mesh(s.left, o.material); m.name = o.name + '_L'; leftPieces.push(m); }
+      if (s.right) { const m = new THREE.Mesh(s.right, o.material); m.name = o.name + '_R'; rightPieces.push(m); }
+    }
+    if (o.name === 'Obj_Side_Doors') removals.push(o);
+  });
+  removals.forEach(r => { if (r.parent) r.parent.remove(r); });
+
+  if (leftPieces.length && rightPieces.length) {
+    const bL = boxOfMeshes(leftPieces), bR = boxOfMeshes(rightPieces);
+    const frontX = Math.min(bL.min.x, bR.min.x);       // front edge (A-pillar side)
+    const hingeY = Math.max(bL.max.y, bR.max.y);       // top edge — scissor hinge line
+    const zL = bL.min.z, zR = bR.max.z;                // inner edges (toward car centre)
+
+    doorPivotL = new THREE.Group();
+    doorPivotL.position.set(frontX, hingeY, zL);
+    leftPieces.forEach(m => { m.position.set(-frontX, -hingeY, -zL); doorPivotL.add(m); });
+    carRoot.add(doorPivotL);
+
+    doorPivotR = new THREE.Group();
+    doorPivotR.position.set(frontX, hingeY, zR);
+    rightPieces.forEach(m => { m.position.set(-frontX, -hingeY, -zR); doorPivotR.add(m); });
+    carRoot.add(doorPivotR);
+  }
+
+  // ---- front hood (frunk) — hinge at the front, rear lifts ----
+  let hoodMesh = null;
+  car.traverse(o => { if (o.name === 'Obj_Hood') hoodMesh = o; });
+  if (hoodMesh) {
+    const b = new THREE.Box3().setFromObject(hoodMesh);
+    hoodPivot = new THREE.Group();
+    hoodPivot.position.set(b.min.x, b.min.y, 0);
+    carRoot.add(hoodPivot);
+    hoodPivot.updateMatrixWorld(true);
+    hoodPivot.attach(hoodMesh);
+  }
+
+  // ---- engine cover (rear louvres) — hinge at the front, rear lifts ----
+  let engineMesh = null;
+  car.traverse(o => { if (o.name === 'Obj_Engine_Cover') engineMesh = o; });
+  if (engineMesh) {
+    const b = new THREE.Box3().setFromObject(engineMesh);
+    enginePivot = new THREE.Group();
+    enginePivot.position.set(b.min.x, b.min.y, 0);
+    carRoot.add(enginePivot);
+    enginePivot.updateMatrixWorld(true);
+    enginePivot.attach(engineMesh);
+  }
+}
+
+function updateMovingParts(dt) {
+  const k = 1 - Math.exp(-dt * 5);
+  for (const key in MOVING) MOVING[key].current += (MOVING[key].target - MOVING[key].current) * k;
+  if (doorPivotL) doorPivotL.rotation.x = -DOOR_OPEN * MOVING.doors.current;
+  if (doorPivotR) doorPivotR.rotation.x =  DOOR_OPEN * MOVING.doors.current;
+  if (hoodPivot) hoodPivot.rotation.z = HOOD_OPEN * MOVING.hood.current;
+  if (enginePivot) enginePivot.rotation.z = ENGINE_OPEN * MOVING.engine.current;
+}
+
+function togglePart(key) {
+  const s = MOVING[key];
+  s.target = s.target > 0.5 ? 0 : 1;
+  syncPartButtons();
+}
+
+function syncPartButtons() {
+  const map = { doors: 'doorBtn', hood: 'hoodBtn', engine: 'engineBtn' };
+  for (const key in map) {
+    const el = document.getElementById(map[key]);
+    if (!el) continue;
+    const open = MOVING[key].target > 0.5;
+    el.classList.toggle('on', open);
+    const em = el.querySelector('em');
+    if (em) em.textContent = open ? 'OPEN' : 'CLOSED';
+  }
 }
 
 /* ------------------------------------------------------------
@@ -483,6 +647,26 @@ cinemaBtn.addEventListener('click', toggleCinema);
 watchBtn.addEventListener('click', toggleCinema);
 
 /* ------------------------------------------------------------
+   Moving parts UI (doors / hood / engine)
+   ------------------------------------------------------------ */
+const doorBtn = document.getElementById('doorBtn');
+const hoodBtn = document.getElementById('hoodBtn');
+const engineBtn = document.getElementById('engineBtn');
+if (doorBtn) doorBtn.addEventListener('click', () => togglePart('doors'));
+if (hoodBtn) hoodBtn.addEventListener('click', () => togglePart('hood'));
+if (engineBtn) engineBtn.addEventListener('click', () => togglePart('engine'));
+
+window.addEventListener('keydown', (e) => {
+  if (e.repeat) return;
+  switch (e.key.toLowerCase()) {
+    case 'd': togglePart('doors'); break;
+    case 'h': togglePart('hood'); break;
+    case 'e': togglePart('engine'); break;
+  }
+});
+syncPartButtons();
+
+/* ------------------------------------------------------------
    Loader progress
    ------------------------------------------------------------ */
 const loaderEl = document.getElementById('loader');
@@ -614,6 +798,7 @@ function tick() {
   readScrollShot();
   updateCamera(dt);
   updateCar(dt);
+  updateMovingParts(dt);
 
   // timecode
   tcEl.textContent = fmtTC(tcFrames);

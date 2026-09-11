@@ -3,7 +3,8 @@
 A cinematic, single-page landing experience for the Lamborghini Aventador:
 real-time PBR 3D car model (GLB), studio reflections, a "live camera" film
 rig, film grain / chromatic-aberration post-processing, a viewfinder HUD with
-timecode, scroll-driven camera moves, and a live paint configurator.
+timecode, scroll-driven camera moves, a live paint configurator, and
+scissor-style opening doors (button or the `D` key).
 
 ## Project structure
 

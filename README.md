@@ -1,23 +1,27 @@
 # Revuelto — Extraordinary, from nothing
 
-A cinematic Next.js + Three.js + GSAP scroll-assembly landing page. This branch is an independent preview; **do not merge into master** unless replacing the existing Aventador website is explicitly intended.
+A scroll-driven Next.js + Three.js + GSAP landing page. The real, free Revuelto model assembles from an empty scene; scrolling backward reverses the sequence.
 
-## Run
+## Run locally
 
-Use Node.js 22. `npm install`, then `npm run dev`. The predev/prebuild step downloads ALIEEEN's free CC BY 4.0 Revuelto and its declared buffers/textures from a pinned public mirror. No paid model, account, API key, or database is required.
+Use Node.js 22, run `npm install`, then `npm run dev`. The predev step retrieves the credited model, preserves the source assets, and creates the optimized meshopt/WebP GLB. No paid model, API key, database, or account is needed.
 
-`npm run build` creates the production build. `npm start` serves it. `npm test` covers deterministic animation and safe asset preparation. `npm run typecheck` checks the Next.js application.
+`npm run build` prepares assets, runs the unit and headlight geometry checks, compiles Next.js, then runs Chromium/WebGL acceptance tests. `npm start` serves the production build. Use `CHROMIUM_PATH` to supply a local Chromium executable when the bundled Linux browser is inappropriate for your OS.
 
-## Deployment
+## Experience
 
-The `revuelto-assembly` branch is intended for the existing repository's **Vercel Preview** environment. `vercel.json` explicitly selects Next.js and `.next` output to override the existing static-project defaults without changing production settings.
+Eight assembly chapters; camera storyboard; forward headlights and floor illumination; three finishes; exploded view; 360-degree inspection; keyboard controls; replay; responsive design; reduced motion; Data Saver opt-in; Auto/High/Eco rendering quality; accessible loading and fallback content.
 
-## Features
+## Performance
 
-Empty opening; reversible part-by-part assembly; camera storyboard; eight chapters; three paint finishes; lighting toggle; exploded view; 360-degree inspection; replay; reduced motion; keyboard navigation; responsive layouts; accessible credits and loading/error state.
+The optimized car combines compressed geometry and WebP textures without joining or simplifying the independent assembly nodes. Hashed model files use immutable caching. Responsive image variants retain the approved reference image. On-demand rendering, cached shadows, bounded pixel density and offscreen suspension reduce unnecessary GPU work. Asset byte counts are recorded in the generated optimized manifest; they are not Lighthouse or hardware frame-rate measurements.
 
-## Assets and scope
+## Deployment and testing
 
-The actual model is the standard Revuelto, not the custom body kit in the supplied visual reference. The cinematic support frame is illustrative, not a factory-accurate chassis. The assembly is artistic, not an actual factory sequence. See THIRD_PARTY_NOTICES.md. Original code and third-party assets have separate licenses.
+`master` is the Vercel production branch. Feature branches receive previews. Preview builds expose failed browser diagnostics for review; production and GitHub Actions builds fail if browser acceptance fails. Do not treat a READY preview alone as a passed test.
 
-Validation and deployment status are recorded separately in the deployment handoff. Do not equate a successful build with a full hardware/WebGL performance test.
+GitHub Actions uploads `premium-browser-review` with the browser screenshots and JSON diagnostics. The generated `public/diagnostics/premium.json` records actual WebGL tests, not a mocked model or a fallback image.
+
+## Asset scope
+
+The interactive model is a standard Revuelto, not the custom body kit in the reference image. The support frame and assembly order are illustrative, not a factory simulation. See `THIRD_PARTY_NOTICES.md` and `docs/PREMIUM-UPGRADE.md`.

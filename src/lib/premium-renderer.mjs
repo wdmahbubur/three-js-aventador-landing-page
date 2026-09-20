@@ -10,14 +10,18 @@ import { renderBudget, nextAdaptiveRatio, QUALITY_MODES, advanceExplosion } from
 export class AssemblyEngine extends HeadlightAssemblyEngine {
   constructor(host, options) {
     super(host, options);
-    this.active = true;
-    this.quality = 'auto';
-    this.renderCount = 0;
-    this.frameSamples = 0;
-    this.frameMean = 16;
+    this.active = true; this.quality = 'auto';
+    this.renderCount = 0; this.frameSamples = 0; this.frameMean = 16;
     this.renderer.shadowMap.autoUpdate = false;
     this.renderer.shadowMap.needsUpdate = true;
-    this.applyQuality();
+    // Native viewport checks supplement asynchronously delivered intersection events.
+    const syncViewport = () => {
+      const rect = this.host.getBoundingClientRect();
+      this.setActive(rect.bottom > 0 && rect.top < innerHeight);
+    };
+    window.addEventListener('scroll', syncViewport, { passive: true, signal: this.abort.signal });
+    window.addEventListener('resize', syncViewport, { passive: true, signal: this.abort.signal });
+    syncViewport(); this.applyQuality();
   }
   buildStudio() {
     super.buildStudio();
@@ -29,28 +33,19 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
       if (object.isDirectionalLight) object.intensity = object.castShadow ? 2.3 : 1.7;
       if (object.isRectAreaLight) object.intensity *= .64;
       if (object.isMesh && object.geometry.type === 'PlaneGeometry' && object.geometry.parameters.width === 90) {
-        object.material.color.set(0x141922);
-        object.material.roughness = .68;
-        object.material.metalness = .13;
+        object.material.color.set(0x141922); object.material.roughness = .68; object.material.metalness = .13;
       }
     });
   }
   prepareMaterial(original) {
-    const material = super.prepareMaterial(original);
-    const name = original.name || '';
+    const material = super.prepareMaterial(original), name = original.name || '';
     if (/^(body|paint|carpaint|car_paint)$/i.test(name)) {
-      material.metalness = .35;
-      material.roughness = .27;
-      material.clearcoat = .72;
-      material.envMapIntensity = .6;
-      material.clearcoatRoughness = .16;
+      material.metalness = .35; material.roughness = .27; material.clearcoat = .72;
+      material.envMapIntensity = .6; material.clearcoatRoughness = .16;
     }
     if (/glass|window|windscreen/i.test(name) && !/head|tail|light/i.test(name)) {
-      material.color.set(0x141b24);
-      material.opacity = .74;
-      material.roughness = .12;
-      material.metalness = .05;
-      material.envMapIntensity = .3;
+      material.color.set(0x141b24); material.opacity = .74; material.roughness = .12;
+      material.metalness = .05; material.envMapIntensity = .3;
     }
     return material;
   }
@@ -72,50 +67,38 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
       }
     });
     super.prepareModel(source);
-    this.lastPoseProgress = NaN;
-    this.lastPoseExplosion = NaN;
+    this.lastPoseProgress = NaN; this.lastPoseExplosion = NaN;
     this.renderer.shadowMap.needsUpdate = true;
   }
   async loadModel() {
-    // Generated before next build; embedded in this chunk to remove a manifest round trip.
     const manifest = modelManifest;
-    if (!/^\/models\/optimized\/revuelto-[a-f0-9]{12}\.glb$/.test(manifest?.file || '')) {
-      throw new Error('The optimized car manifest is invalid. Rebuild the model assets.');
-    }
-    this.modelBytes = manifest.bytes;
-    this.modelSource = 'meshopt-webp';
+    if (!/^\/models\/optimized\/revuelto-[a-f0-9]{12}\.glb$/.test(manifest?.file || '')) throw new Error('The optimized car manifest is invalid. Rebuild the model assets.');
+    this.modelBytes = manifest.bytes; this.modelSource = 'meshopt-webp';
     this.callbacks.onStatus('Loading the Revuelto…');
     const manager = new THREE.LoadingManager(), failures = [];
     manager.onError = url => failures.push(url);
     const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
     let timer, expired = false, gltf;
     const loading = loader.loadAsync(manifest.file, event => {
-      if (!this.destroyed && event.lengthComputable) {
-        this.callbacks.onStatus(`Loading Revuelto · ${Math.min(99, Math.round(event.loaded / event.total * 100))}%`);
-      }
+      if (!this.destroyed && event.lengthComputable) this.callbacks.onStatus(`Loading Revuelto · ${Math.min(99, Math.round(event.loaded / event.total * 100))}%`);
     }).then(result => {
       if (expired || this.destroyed) { this.disposeLoaded(result.scene); throw new Error('Loading cancelled'); }
       return result;
     });
     try {
-      gltf = await Promise.race([loading, new Promise((_, reject) => {
-        timer = setTimeout(() => { expired = true; reject(new Error('Model download timed out.')); }, 90000);
-      })]);
+      gltf = await Promise.race([loading, new Promise((_, reject) => { timer = setTimeout(() => { expired = true; reject(new Error('Model download timed out.')); }, 90000); })]);
     } finally { clearTimeout(timer); }
     if (this.destroyed) return;
     if (failures.length) { this.disposeLoaded(gltf.scene); throw new Error('A car texture failed to decode.'); }
     this.callbacks.onStatus('Preparing the showroom lighting…');
     this.prepareModel(gltf.scene);
     const progress = this.progress;
-    this.progress = 1;
-    this.applyProgress();
+    this.progress = 1; this.applyProgress();
     const compiling = this.renderer.compileAsync(this.scene, this.camera);
-    this.progress = progress;
-    this.applyProgress();
+    this.progress = progress; this.applyProgress();
     await compiling;
     if (this.destroyed) return;
-    this.ready = true;
-    this.applyProgress(); this.invalidate();
+    this.ready = true; this.applyProgress(); this.invalidate();
     this.callbacks.onReady({ parts: this.parts.length, optimized: true });
   }
   applyProgress() {
@@ -124,11 +107,9 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
       for (const part of this.parts) {
         const rest = 1 - interval(this.progress, part.start, part.end);
         part.group.visible = this.progress > part.start || this.exploded > 0;
-        part.group.position.set(
-          part.center.x + part.entry[0] * rest + part.explosion[0] * this.exploded,
+        part.group.position.set(part.center.x + part.entry[0] * rest + part.explosion[0] * this.exploded,
           part.center.y + part.entry[1] * rest + part.explosion[1] * this.exploded,
-          part.center.z + part.entry[2] * rest + part.explosion[2] * this.exploded
-        );
+          part.center.z + part.entry[2] * rest + part.explosion[2] * this.exploded);
         part.group.rotation.set(part.rotation[0] * rest, part.rotation[1] * rest, part.rotation[2] * rest);
       }
       this.lastPoseProgress = this.progress; this.lastPoseExplosion = this.exploded;
@@ -144,54 +125,43 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
   }
   applyQuality() {
     if (!this.renderer || !this.width) return;
-    const budget = renderBudget({ width: this.width, dpr: devicePixelRatio,
-      memory: navigator.deviceMemory || 8, cores: navigator.hardwareConcurrency || 8, quality: this.quality });
-    this.renderer.setPixelRatio(budget.pixelRatio);
-    this.renderer.setSize(this.width, this.height, false);
+    const budget = renderBudget({ width: this.width, dpr: devicePixelRatio, memory: navigator.deviceMemory || 8, cores: navigator.hardwareConcurrency || 8, quality: this.quality });
+    this.renderer.setPixelRatio(budget.pixelRatio); this.renderer.setSize(this.width, this.height, false);
     this.scene.traverse(object => {
       if (object.isDirectionalLight && object.shadow && object.shadow.mapSize.x !== budget.shadowSize) {
-        object.shadow.map?.dispose(); object.shadow.map = null;
-        object.shadow.mapSize.setScalar(budget.shadowSize);
+        object.shadow.map?.dispose(); object.shadow.map = null; object.shadow.mapSize.setScalar(budget.shadowSize);
       }
     });
     this.textures.forEach(texture => { texture.anisotropy = Math.min(budget.anisotropy, this.renderer.capabilities.getMaxAnisotropy()); });
-    this.renderer.shadowMap.needsUpdate = true;
-    this.frameSamples = 0; this.invalidate();
+    this.renderer.shadowMap.needsUpdate = true; this.frameSamples = 0; this.invalidate();
   }
   setExploded(on) { this.lastTime = undefined; super.setExploded(on); }
-  setQuality(quality) {
-    if (!QUALITY_MODES.includes(quality)) return;
-    this.quality = quality; this.applyQuality();
-  }
+  setQuality(quality) { if (QUALITY_MODES.includes(quality)) { this.quality = quality; this.applyQuality(); } }
   resize() { this.lastPoseProgress = NaN; super.resize(); this.applyQuality(); }
   setActive(active) {
-    this.active = Boolean(active);
-    if (!this.active) { cancelAnimationFrame(this.requestId); this.requestId = 0; }
+    const rect = this.host.getBoundingClientRect();
+    const next = Boolean(active) && rect.bottom > 0 && rect.top < innerHeight;
+    if (next === this.active) return;
+    this.active = next;
+    if (!next) { cancelAnimationFrame(this.requestId); this.requestId = 0; }
     else { this.lastTime = undefined; this.invalidate(); }
   }
   invalidate() { if (this.active !== false) super.invalidate(); }
   draw(time) {
     this.requestId = 0;
     if (this.destroyed || this.active === false || document.hidden) return;
-    const elapsed = time - (this.lastTime || time - 16);
-    const delta = Math.min(.5, Math.max(.001, elapsed / 1000));
+    const elapsed = time - (this.lastTime || time - 16), delta = Math.min(.5, Math.max(.001, elapsed / 1000));
     this.lastTime = time;
     const moving = this.exploded !== this.explodeTarget;
-    if (moving) {
-      this.exploded = advanceExplosion(this.exploded, this.explodeTarget, delta, this.reduced);
-      this.applyProgress();
-    }
+    if (moving) { this.exploded = advanceExplosion(this.exploded, this.explodeTarget, delta, this.reduced); this.applyProgress(); }
     const orbitChanged = this.inspect ? this.controls.update() : false;
-    this.renderer.render(this.scene, this.camera);
-    this.renderCount = (this.renderCount || 0) + 1;
+    this.renderer.render(this.scene, this.camera); this.renderCount = (this.renderCount || 0) + 1;
     let resolutionChanged = false;
     if ((moving || orbitChanged || this.lastFrameProgress !== this.progress) && elapsed > 5 && elapsed < 3000) {
-      this.frameMean = this.frameMean * .9 + elapsed * .1;
-      this.frameSamples++;
+      this.frameMean = this.frameMean * .9 + elapsed * .1; this.frameSamples++;
       const ratio = nextAdaptiveRatio(this.renderer.getPixelRatio(), this.frameMean, this.frameSamples, this.quality);
       if (ratio !== this.renderer.getPixelRatio()) {
-        this.renderer.setPixelRatio(ratio);
-        this.renderer.setSize(this.width, this.height, false);
+        this.renderer.setPixelRatio(ratio); this.renderer.setSize(this.width, this.height, false);
         this.frameSamples = 0; resolutionChanged = true;
       }
     }
@@ -199,8 +169,7 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     if (this.exploded !== this.explodeTarget || orbitChanged || resolutionChanged) this.invalidate();
   }
   getState() {
-    return { ...super.getState(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(),
-      active: this.active, renderCount: this.renderCount, optimizedModel: this.modelSource === 'meshopt-webp',
-      modelBytes: this.modelBytes || null };
+    return { ...super.getState(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), active: this.active,
+      renderCount: this.renderCount, optimizedModel: this.modelSource === 'meshopt-webp', modelBytes: this.modelBytes || null };
   }
 }

@@ -17,7 +17,6 @@ function check(name, passed, detail) {
 const state = page => page.evaluate(() => window.__REVUELTO__.getState());
 async function seek(page, progress) {
   await page.evaluate(p => window.__REVUELTO__.seek(p), progress);
-  // Endpoints must really finish, not just approach them within a loose tolerance.
   await page.waitForFunction(p => Math.abs(window.__REVUELTO__.getState().progress - p) < (p === 0 || p === 1 ? .000001 : .001), { timeout: 30000 }, progress);
   await pause(900);
 }
@@ -76,6 +75,7 @@ try {
   check('Keyboard rotates the camera', JSON.stringify((await state(page)).camera) !== JSON.stringify(camera));
   await page.keyboard.press('Escape');
   check('Escape exits inspection', !(await state(page)).inspect);
+  await page.$eval('canvas', el => el.blur());
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 2 });
   await page.select('select[data-quality]', 'eco'); await pause(300);
   check('Eco caps renderer resolution', (await state(page)).pixelRatio <= 1);
@@ -93,9 +93,11 @@ try {
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await seek(page, 0);
   check('Reverse scrolling returns to an empty stage', (await state(page)).visibleParts === 0);
-  await page.$eval('#design', el => el.scrollIntoView()); await pause(1600);
+  // Exercise the real navigation and wait for observer delivery, not an arbitrary sleep.
+  await page.click('.header-nav a[href="#design"]');
+  await page.waitForFunction(() => window.__REVUELTO__.getState().active === false, { timeout: 30000 });
   check('Renderer pauses outside the 3D section', (await state(page)).active === false);
-  await screenshot(page, 'premium-design');
+  await pause(900); await screenshot(page, 'premium-design');
   const awayA = (await state(page)).renderCount; await pause(450);
   check('No GPU frames are produced offscreen', (await state(page)).renderCount === awayA);
   await page.$eval('[data-action="credits"]', el => el.click());
@@ -127,7 +129,7 @@ try {
   report.error = error.stack || String(error);
   if (page) try {
     report.failureState = await state(page);
-    report.failureLayout = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, scrollY, explodedPressed: document.querySelector('[data-action="explode"]').getAttribute('aria-pressed'), track: document.querySelector('.assembly-track').getBoundingClientRect().toJSON() }));
+    report.failureLayout = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, scrollY, hidden: document.hidden, explodedPressed: document.querySelector('[data-action="explode"]').getAttribute('aria-pressed'), track: document.querySelector('.assembly-track').getBoundingClientRect().toJSON() }));
     await screenshot(page, 'premium-failure');
   } catch {}
   console.error('Browser verification failed:', report.error);

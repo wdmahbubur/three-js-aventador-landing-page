@@ -1,19 +1,22 @@
 {
   "name": "revuelto-assembly",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "engines": { "node": "22.x" },
   "scripts": {
     "assets": "node tools/prepare-model.mjs",
-    "predev": "npm run assets",
+    "optimize": "node tools/optimize-assets.mjs",
+    "predev": "npm run assets && npm run optimize",
     "dev": "next dev",
-    "prebuild": "npm run assets && npm test && npm run verify:headlights",
+    "prebuild": "npm run assets && npm run optimize && npm test && npm run verify:headlights",
     "build": "next build",
+    "postbuild": "node tools/review-browser.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.mjs",
     "verify:headlights": "node tools/verify-headlights.mjs",
+    "verify:browser": "node tools/verify-browser.mjs",
     "check": "npm run test && npm run typecheck && npm run build"
   },
   "dependencies": {
@@ -27,6 +30,13 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "@gltf-transform/core": "4.2.1",
+    "@gltf-transform/extensions": "4.2.1",
+    "@gltf-transform/functions": "4.2.1",
+    "meshoptimizer": "0.24.0",
+    "sharp": "0.34.3",
+    "puppeteer-core": "24.14.0",
+    "@sparticuz/chromium": "138.0.2"
   }
 }

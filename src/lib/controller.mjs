@@ -1,6 +1,7 @@
 import { CHAPTERS, FINISHES } from './config.mjs';
 import { clamp01, chapterIndex, interval, normalizedScroll } from './timeline.mjs';
 import { allowAutomatic3D, QUALITY_MODES } from './performance.mjs';
+import { synchronizeScrollAnimation } from './scroll-sync.mjs';
 
 /** Mount the DOM story and optional GPU renderer with complete teardown. */
 export function mountExperience(root) {
@@ -18,7 +19,7 @@ export function mountExperience(root) {
   let current = reduced ? 1 : 0, currentChapter = -1, lastPercent = -1;
   let inspecting = false, exploded = false, lights = true;
   let gsap, ScrollTrigger, scrollTween, scrollTrigger;
-  let frame = 0, lastFocus, idleTask;
+  let frame = 0, settleFrame = 0, lastFocus, idleTask;
   let cabinMode = 'exterior', cabinFocus, cabinReturnProgress = 1, restoringCabinScroll = false;
   let graphicsStarted = false, stageActive = true, quality = 'auto';
   try { const saved = localStorage.getItem('revuelto-quality'); if (QUALITY_MODES.includes(saved)) quality = saved; } catch {}
@@ -84,12 +85,11 @@ export function mountExperience(root) {
         const { top, height, viewport } = geometry();
         const position = top + cabinReturnProgress * Math.max(0, height - viewport);
         window.scrollTo({ top: position, behavior: 'instant' });
-        scrollTrigger?.update(); scrollTrigger?.getTween()?.progress(1);
+        ScrollTrigger?.update(true);
       }
       restoringCabinScroll = false;
       if (!destroyed) {
-        const { top, height, viewport } = geometry();
-        update(reduced ? 1 : normalizedScroll(scrollY, top, height, viewport));
+        settleScrollPose();
         engine?.setActive(true);
         cabinFocus?.focus({ preventScroll: true });
       }
@@ -158,6 +158,11 @@ export function mountExperience(root) {
   function requestUpdate() {
     if (!frame && !destroyed && !scrollTrigger) frame = requestAnimationFrame(updateFromScroll);
   }
+  function settleScrollPose(trigger = scrollTrigger) {
+    if (destroyed || cabinMode !== 'exterior' || restoringCabinScroll) return;
+    const { top, height, viewport } = geometry();
+    synchronizeScrollAnimation(trigger, reduced ? 1 : normalizedScroll(scrollY, top, height, viewport), update);
+  }
   function jump(progress, immediate = false) {
     engine?.resetCabin();
     setInspect(false); setExplode(false);
@@ -170,7 +175,13 @@ export function mountExperience(root) {
     const { top, height, viewport } = geometry();
     window.scrollTo({ top: top + clamp01(progress) * Math.max(0, height - viewport), behavior: reduced || immediate ? 'instant' : 'smooth' });
     if (immediate || reduced) {
-      scrollTrigger?.update(); scrollTrigger?.getTween()?.progress(1); requestUpdate();
+      // The static update invalidates ScrollTrigger's cached native scroll position.
+      // Completing an old scrub tween after refresh can replay its PRE-resize target.
+      ScrollTrigger?.update(true);
+      settleScrollPose();
+      cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(() => { settleFrame = 0; settleScrollPose(); });
+      requestUpdate();
     }
   }
   function installScroll() {
@@ -182,11 +193,11 @@ export function mountExperience(root) {
         value: 1, duration: 1, ease: 'none', onUpdate: () => update(proxy.value),
         scrollTrigger: {
           trigger: track, start: 'top top', end: 'bottom bottom', scrub: .55,
-          onRefresh: self => { self.getTween()?.progress(1); self.animation?.progress(self.progress); }
+          onRefresh: self => settleScrollPose(self)
         }
       });
       scrollTrigger = scrollTween.scrollTrigger;
-      ScrollTrigger.refresh(); scrollTrigger.update();
+      ScrollTrigger.refresh(); ScrollTrigger.update(true); settleScrollPose();
     } else updateFromScroll();
   }
   function setMotion(value, persist = false) {
@@ -334,7 +345,7 @@ export function mountExperience(root) {
     };
   }
   return () => {
-    destroyed = true; document.documentElement.classList.remove('cabin-locked'); abort.abort(); cancelAnimationFrame(frame);
+    destroyed = true; document.documentElement.classList.remove('cabin-locked'); abort.abort(); cancelAnimationFrame(frame); cancelAnimationFrame(settleFrame);
     if ('cancelIdleCallback' in window) cancelIdleCallback(idleTask); else clearTimeout(idleTask);
     stageObserver.disconnect(); editorialObserver.disconnect(); resizeObserver.disconnect(); scrollTrigger?.kill(); scrollTween?.kill();
     engine?.dispose(); if (dialog.open) dialog.close();

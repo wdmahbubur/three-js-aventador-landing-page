@@ -10,7 +10,7 @@ const output = path.resolve('public/diagnostics');
 await fs.mkdir(output, { recursive: true });
 const checks = [], runtimeErrors = [], requestsFailed = [];
 const report = { passed: false, renderedInBrowser: false, renderer: 'Chromium / software WebGL', checks, runtimeErrors, requestsFailed };
-let browser, server;
+let browser, server, page;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), ...(detail === undefined ? {} : { detail }) });
@@ -45,19 +45,13 @@ try {
   browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || await chromium.executablePath(),
     args: [...chromium.args, '--enable-unsafe-swiftshader'], headless: 'shell',
     defaultViewport: { width: 1440, height: 900, deviceScaleFactor: 1 }, protocolTimeout: 180000 });
-  const page = await browser.newPage();
+  page = await browser.newPage();
   page.on('pageerror', error => runtimeErrors.push(String(error)));
   page.on('console', message => { if (message.type() === 'error') runtimeErrors.push(message.text()); });
   page.on('requestfailed', request => requestsFailed.push({ url: request.url(), failure: request.failure()?.errorText }));
   await page.goto(base + '/?debug', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => window.__REVUELTO__?.getState().ready || window.__REVUELTO__?.getState().engineError, { timeout: 180000 });
   const opening = await state(page);
-  report.browserManifest = await page.evaluate(async () => {
-    try {
-      const response = await fetch('/models/optimized/manifest.json', { cache: 'no-cache' });
-      return { status: response.status, body: (await response.text()).slice(0, 12000), signalAny: typeof AbortSignal.any };
-    } catch (error) { return { error: String(error) }; }
-  });
   await screenshot(page, 'premium-opening');
   check('Actual compressed model loads', opening.ready && opening.optimizedModel, opening);
   check('Car has independent assembly parts', opening.parts > 20, opening.parts);
@@ -75,8 +69,7 @@ try {
   check('All real parts assemble at the end', reveal.visibleParts === reveal.parts && reveal.assembledParts === reveal.parts);
   check('Projected headlights are preserved', reveal.headlights?.count === 2 && reveal.headlights.strength > .99, reveal.headlights);
   await screenshot(page, 'premium-desktop');
-  report.renderedInBrowser = true;
-  report.reveal = reveal;
+  report.renderedInBrowser = true; report.reveal = reveal;
   await page.click('[data-action="lights"]');
   check('Headlight toggle disables the beam', (await state(page)).headlights.strength === 0);
   await page.click('[data-action="lights"]');
@@ -103,6 +96,7 @@ try {
   await page.select('select[data-quality]', 'auto');
   for (const [width, height] of [[320, 568], [390, 844], [768, 1024], [844, 390]]) {
     await page.setViewport({ width, height, deviceScaleFactor: 1 });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await seek(page, 1);
     check(`No horizontal overflow at ${width}×${height}`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
     check(`Controls fit the viewport at ${width}×${height}`, await page.$eval('[data-reveal-controls]', el => {
@@ -145,6 +139,15 @@ try {
   report.passed = true;
 } catch (error) {
   report.error = error.stack || String(error);
+  if (page) {
+    try {
+      report.failureState = await state(page);
+      report.failureLayout = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, scrollY,
+        explodedPressed: document.querySelector('[data-action="explode"]').getAttribute('aria-pressed'),
+        track: document.querySelector('.assembly-track').getBoundingClientRect().toJSON() }));
+      await screenshot(page, 'premium-failure');
+    } catch {}
+  }
   console.error('Browser verification failed:', report.error);
 } finally {
   if (browser) await browser.close().catch(() => {});

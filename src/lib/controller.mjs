@@ -2,20 +2,14 @@ import { CHAPTERS, FINISHES } from './config.mjs';
 import { clamp01, chapterIndex, interval, normalizedScroll } from './timeline.mjs';
 import { allowAutomatic3D, QUALITY_MODES } from './performance.mjs';
 
-/** Mounts both the DOM story and the optional GPU renderer. Returns full cleanup. */
+/** Mount the DOM story and optional GPU renderer with complete teardown. */
 export function mountExperience(root) {
-  const abort = new AbortController();
-  const signal = abort.signal;
+  const abort = new AbortController(), signal = abort.signal;
   const nodes = new Map(), lists = new Map();
-  const $ = (selector) => { if (!nodes.has(selector)) nodes.set(selector, root.querySelector(selector)); return nodes.get(selector); };
-  const $$ = (selector) => { if (!lists.has(selector)) lists.set(selector, [...root.querySelectorAll(selector)]); return lists.get(selector); };
-  const track = $('.assembly-track');
-  const intro = $('[data-intro]');
-  const story = $('[data-story]');
-  const meter = $('[data-meter]');
-  const status = $('[data-status]');
-  const controls = $('[data-reveal-controls]');
-  const dialog = $('[data-credits]');
+  const $ = selector => { if (!nodes.has(selector)) nodes.set(selector, root.querySelector(selector)); return nodes.get(selector); };
+  const $$ = selector => { if (!lists.has(selector)) lists.set(selector, [...root.querySelectorAll(selector)]); return lists.get(selector); };
+  const track = $('.assembly-track'), intro = $('[data-intro]'), story = $('[data-story]');
+  const meter = $('[data-meter]'), status = $('[data-status]'), controls = $('[data-reveal-controls]'), dialog = $('[data-credits]');
   const media = matchMedia('(prefers-reduced-motion: reduce)');
   let storedMotion;
   try { storedMotion = localStorage.getItem('revuelto-motion'); } catch {}
@@ -25,20 +19,18 @@ export function mountExperience(root) {
   let inspecting = false, exploded = false, lights = true;
   let gsap, ScrollTrigger, scrollTween, scrollTrigger;
   let frame = 0, lastFocus, idleTask;
-  let graphicsStarted = false, stageActive = true;
-  let quality = 'auto';
+  let graphicsStarted = false, stageActive = true, quality = 'auto';
   try { const saved = localStorage.getItem('revuelto-quality'); if (QUALITY_MODES.includes(saved)) quality = saved; } catch {}
   $('[data-quality]').value = quality;
   root.dataset.quality = quality;
-  function showFallback() {
-    const image = $('.fallback-image img');
-    if (!image.getAttribute('src')) image.src = image.dataset.fallbackSrc;
-  }
   root.dataset.motion = reduced ? 'reduced' : 'full';
   document.fonts?.ready.then(() => {
     if (!destroyed && getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim()) root.dataset.fontsReady = 'true';
   });
-
+  function showFallback() {
+    const image = $('.fallback-image img');
+    if (!image.getAttribute('src')) image.src = image.dataset.fallbackSrc;
+  }
   function announce(text) { $('[data-announcement]').textContent = text; }
   function setStatus(text) { if (status.textContent !== text) status.textContent = text; }
   function stateStatus() {
@@ -63,8 +55,7 @@ export function mountExperience(root) {
     const next = reduced ? 1 : clamp01(progress);
     if (next === current && currentChapter >= 0) return;
     current = next;
-    const index = chapterIndex(current);
-    const percent = Math.round(current * 100);
+    const index = chapterIndex(current), percent = Math.round(current * 100);
     root.style.setProperty('--progress', String(current));
     intro.style.opacity = String(1 - interval(current, .018, .102));
     intro.style.transform = `translateY(${-interval(current, .01, .11) * 45}px)`;
@@ -86,8 +77,7 @@ export function mountExperience(root) {
         button.classList.toggle('is-active', i === index);
         if (i === index) button.setAttribute('aria-current', 'step'); else button.removeAttribute('aria-current');
       });
-      announce(chapter.kicker);
-      stateStatus();
+      announce(chapter.kicker); stateStatus();
     }
     if (percent !== lastPercent) {
       lastPercent = percent;
@@ -97,8 +87,8 @@ export function mountExperience(root) {
     $('[data-meter-fill]').style.transform = `scaleX(${current})`;
     const finished = current >= .965;
     controls.hidden = !finished;
-    $$('.stage-actions [data-action="reveal"]').forEach((button) => { button.hidden = finished; });
-    $$('.stage-actions [data-action="replay"]').forEach((button) => { button.hidden = !finished; });
+    $$('.stage-actions [data-action="reveal"]').forEach(button => { button.hidden = finished; });
+    $$('.stage-actions [data-action="replay"]').forEach(button => { button.hidden = !finished; });
     if (!finished && inspecting) setInspect(false);
     if (!finished && exploded) setExplode(false);
     engine?.setProgress(current);
@@ -123,9 +113,15 @@ export function mountExperience(root) {
       requestAnimationFrame(() => jump(progress, immediate));
       return;
     }
+    // Synchronize cached trigger bounds before a jump after viewport/orientation changes.
+    ScrollTrigger?.refresh();
     const { top, height, viewport } = geometry();
     window.scrollTo({ top: top + clamp01(progress) * Math.max(0, height - viewport), behavior: reduced || immediate ? 'instant' : 'smooth' });
-    if (immediate || reduced) { scrollTrigger?.update(); requestUpdate(); }
+    if (immediate || reduced) {
+      scrollTrigger?.update();
+      scrollTrigger?.getTween()?.progress(1);
+      requestUpdate();
+    }
   }
   function installScroll() {
     scrollTrigger?.kill(); scrollTween?.kill(); scrollTrigger = scrollTween = undefined;
@@ -133,9 +129,15 @@ export function mountExperience(root) {
     if (gsap && ScrollTrigger) {
       const proxy = { value: 0 };
       scrollTween = gsap.fromTo(proxy, { value: 0 }, {
-        value: 1, duration: 1, ease: 'none',
-        onUpdate: () => update(proxy.value),
-        scrollTrigger: { trigger: track, start: 'top top', end: 'bottom bottom', scrub: .55, invalidateOnRefresh: true }
+        value: 1, duration: 1, ease: 'none', onUpdate: () => update(proxy.value),
+        scrollTrigger: {
+          trigger: track, start: 'top top', end: 'bottom bottom', scrub: .55,
+          onRefresh: self => {
+            // Layout refresh is not a new assembly: restore the actual scroll pose.
+            self.getTween()?.progress(1);
+            self.animation?.progress(self.progress);
+          }
+        }
       });
       scrollTrigger = scrollTween.scrollTrigger;
       ScrollTrigger.refresh(); scrollTrigger.update();
@@ -150,33 +152,30 @@ export function mountExperience(root) {
     if (persist) { storedMotion = reduced ? 'reduced' : 'full'; try { localStorage.setItem('revuelto-motion', storedMotion); } catch {} }
     setInspect(false); setExplode(false);
     engine?.setReduced(reduced);
-    currentChapter = -1;
-    installScroll();
+    currentChapter = -1; installScroll();
     requestAnimationFrame(() => { if (!destroyed) { ScrollTrigger?.refresh(); requestUpdate(); } });
   }
   function fail(error) {
     if (destroyed) return;
     ready = false; engineError = true; root.dataset.engine = 'error';
-    showFallback();
-    $('[data-load-error]').hidden = false;
-    $('[data-reduced-notice]').hidden = true;
+    showFallback(); $('[data-load-error]').hidden = false; $('[data-reduced-notice]').hidden = true;
     $('[data-error-message]').textContent = '3D could not load. You can still explore the design below.';
     setStatus('3D unavailable · design story available.');
-    $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach((button) => { button.disabled = true; });
+    $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach(button => { button.disabled = true; });
     engine?.dispose();
     console.warn('[Revuelto] 3D initialization failed:', error);
   }
-  root.addEventListener('click', (event) => {
+  root.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target.closest('[data-action], [data-jump], [data-finish]') : null;
     if (!target || !root.contains(target) || target.disabled) return;
     event.preventDefault();
     if (target.hasAttribute('data-jump')) { jump(Number(target.dataset.jump)); return; }
     if (target.hasAttribute('data-finish')) {
       if (!ready) return;
-      const finish = FINISHES.find((item) => item.id === target.dataset.finish);
+      const finish = FINISHES.find(item => item.id === target.dataset.finish);
       if (!finish) return;
       engine.setFinish(finish.id); root.style.setProperty('--accent', finish.accent);
-      $$('[data-finish]').forEach((button) => {
+      $$('[data-finish]').forEach(button => {
         const active = button.dataset.finish === finish.id;
         button.setAttribute('aria-pressed', String(active)); button.classList.toggle('is-selected', active);
       });
@@ -188,8 +187,7 @@ export function mountExperience(root) {
       case 'replay': jump(0); break;
       case 'motion': {
         const top = geometry().top;
-        setMotion(!reduced, true); window.scrollTo({ top, behavior: 'instant' });
-        break;
+        setMotion(!reduced, true); window.scrollTo({ top, behavior: 'instant' }); break;
       }
       case 'inspect': setInspect(!inspecting); break;
       case 'explode': setExplode(!exploded); break;
@@ -199,31 +197,28 @@ export function mountExperience(root) {
       case 'retry': graphicsStarted = false; engine?.dispose(); startGraphics(); break;
     }
   }, { signal });
-  $('[data-quality]').addEventListener('change', (event) => {
+  $('[data-quality]').addEventListener('change', event => {
     const value = event.target.value;
     if (!QUALITY_MODES.includes(value)) return;
-    quality = value; root.dataset.quality = value;
-    engine?.setQuality(value);
+    quality = value; root.dataset.quality = value; engine?.setQuality(value);
     try { localStorage.setItem('revuelto-quality', value); } catch {}
     announce(`Rendering quality: ${value}.`);
   }, { signal });
   dialog.addEventListener('close', () => lastFocus?.focus({ preventScroll: true }), { signal });
-  dialog.addEventListener('click', (event) => {
+  dialog.addEventListener('click', event => {
     if (event.target !== dialog) return;
     const rect = dialog.getBoundingClientRect();
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   }, { signal });
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape' && inspecting) setInspect(false); }, { signal });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && inspecting) setInspect(false); }, { signal });
   media.addEventListener('change', () => { if (!storedMotion) setMotion(media.matches); }, { signal });
   window.addEventListener('scroll', requestUpdate, { passive: true, signal });
   window.addEventListener('resize', requestUpdate, { passive: true, signal });
   window.addEventListener('pageshow', () => { ScrollTrigger?.refresh(); requestUpdate(); }, { signal });
   const resizeObserver = new ResizeObserver(() => { ScrollTrigger?.refresh(); requestUpdate(); });
   resizeObserver.observe(track);
-  $$('[data-finish]').forEach((button) => { button.disabled = true; });
-  setMotion(reduced);
-  update(reduced ? 1 : current);
-
+  $$('[data-finish]').forEach(button => { button.disabled = true; });
+  setMotion(reduced); update(reduced ? 1 : current);
   function startGraphics() {
     if (graphicsStarted || destroyed) return;
     graphicsStarted = true; engineError = false;
@@ -232,64 +227,54 @@ export function mountExperience(root) {
       if (destroyed) return;
       engine = new AssemblyEngine($('[data-canvas-host]'), {
         reduced,
-        onStatus: (text) => { if (!destroyed) setStatus(text); },
+        onStatus: text => { if (!destroyed) setStatus(text); },
         onReady: () => {
           if (destroyed) return;
           ready = true; engineError = false; root.dataset.engine = 'ready';
-          $('[data-load-error]').hidden = true;
-          $('[data-reduced-notice]').hidden = !reduced;
-          $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach((button) => { button.disabled = false; });
-          engine?.setProgress(current); engine?.setQuality(quality); engine?.setActive(stageActive);
-          stateStatus();
+          $('[data-load-error]').hidden = true; $('[data-reduced-notice]').hidden = !reduced;
+          $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach(button => { button.disabled = false; });
+          engine?.setProgress(current); engine?.setQuality(quality); engine?.setActive(stageActive); stateStatus();
         },
-        onError: fail,
-        onExitInspect: () => setInspect(false)
+        onError: fail, onExitInspect: () => setInspect(false)
       });
       engine.setProgress(current); engine.setQuality(quality); engine.setActive(stageActive);
     }).catch(fail);
   }
-  // Give the opening typography its first paint before GPU and model initialization.
   if (allowAutomatic3D(navigator.connection)) {
     if ('requestIdleCallback' in window) idleTask = requestIdleCallback(startGraphics, { timeout: 900 });
     else idleTask = setTimeout(startGraphics, 80);
   } else {
-    root.dataset.engine = 'deferred';
-    showFallback();
-    $('[data-load-error]').hidden = false;
+    root.dataset.engine = 'deferred'; showFallback(); $('[data-load-error]').hidden = false;
     $('[data-error-message]').textContent = 'Data Saver is on. The 3D download is paused.';
-    $('[data-action="retry"]').textContent = 'ENABLE 3D';
-    setStatus('Data Saver · enable 3D when ready.');
+    $('[data-action="retry"]').textContent = 'ENABLE 3D'; setStatus('Data Saver · enable 3D when ready.');
   }
   const stageObserver = new IntersectionObserver(([entry]) => {
-    stageActive = entry.isIntersecting;
-    engine?.setActive(stageActive);
+    stageActive = entry.isIntersecting; engine?.setActive(stageActive);
   });
   stageObserver.observe(track);
-  const editorialObserver = new IntersectionObserver((entries) => {
+  const editorialObserver = new IntersectionObserver(entries => {
     for (const entry of entries) if (entry.isIntersecting) {
       entry.target.classList.add('is-visible'); editorialObserver.unobserve(entry.target);
     }
   }, { threshold: .08 });
-  $$('[data-editorial]').forEach((section) => editorialObserver.observe(section));
+  $$('[data-editorial]').forEach(section => editorialObserver.observe(section));
   root.dataset.enhanced = 'true';
   Promise.all([import('gsap'), import('gsap/ScrollTrigger')]).then(([core, plugin]) => {
     if (destroyed) return;
-    gsap = core.gsap || core.default;
-    ScrollTrigger = plugin.ScrollTrigger || plugin.default;
+    gsap = core.gsap || core.default; ScrollTrigger = plugin.ScrollTrigger || plugin.default;
     gsap.registerPlugin(ScrollTrigger); installScroll();
-  }).catch(() => { /* Native scroll mapping remains active if the enhancement cannot load. */ });
-
+  }).catch(() => { /* Native scroll mapping remains available. */ });
   if (new URLSearchParams(location.search).has('debug') || root.hasAttribute('data-debug')) {
     window.__REVUELTO__ = {
-      getState: () => ({ progress: current, chapter: currentChapter, reduced, ready, engineError, inspect: inspecting, ...engine?.getState() }),
-      seek: (progress) => jump(progress, true)
+      getState: () => ({ progress: current, chapter: currentChapter, reduced, ready, engineError, inspect: inspecting, ...engine?.getState(),
+        scroll: { y: scrollY, ...geometry(), triggerStart: scrollTrigger?.start, triggerEnd: scrollTrigger?.end, triggerProgress: scrollTrigger?.progress } }),
+      seek: progress => jump(progress, true)
     };
   }
   return () => {
     destroyed = true; abort.abort(); cancelAnimationFrame(frame);
     if ('cancelIdleCallback' in window) cancelIdleCallback(idleTask); else clearTimeout(idleTask);
-    stageObserver.disconnect(); editorialObserver.disconnect();
-    resizeObserver.disconnect(); scrollTrigger?.kill(); scrollTween?.kill();
+    stageObserver.disconnect(); editorialObserver.disconnect(); resizeObserver.disconnect(); scrollTrigger?.kill(); scrollTween?.kill();
     engine?.dispose(); if (dialog.open) dialog.close();
     if (window.__REVUELTO__) delete window.__REVUELTO__;
   };

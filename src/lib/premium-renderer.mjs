@@ -6,7 +6,7 @@ import { AssemblyEngine as HeadlightAssemblyEngine } from './engine.mjs';
 import { interval } from './timeline.mjs';
 import { renderBudget, nextAdaptiveRatio, QUALITY_MODES, advanceExplosion } from './performance.mjs';
 
-/** Optimizes the existing real-model assembly, without changing its part hierarchy. */
+/** Optimizes the existing real-model assembly without merging its independent parts. */
 export class AssemblyEngine extends HeadlightAssemblyEngine {
   constructor(host, options) {
     super(host, options);
@@ -19,15 +19,15 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     this.renderer.shadowMap.needsUpdate = true;
     this.applyQuality();
   }
-
   buildStudio() {
     super.buildStudio();
-    this.renderer.toneMappingExposure = .9;
-    this.scene.environmentIntensity = .85;
+    this.renderer.toneMappingExposure = .82;
+    this.scene.environmentIntensity = .65;
     this.scene.fog.density = .035;
-    this.scene.traverse((object) => {
+    this.scene.traverse(object => {
       if (object.isHemisphereLight) object.intensity = 1.05;
       if (object.isDirectionalLight) object.intensity = object.castShadow ? 2.3 : 1.7;
+      if (object.isRectAreaLight) object.intensity *= .64;
       if (object.isMesh && object.geometry.type === 'PlaneGeometry' && object.geometry.parameters.width === 90) {
         object.material.color.set(0x141922);
         object.material.roughness = .68;
@@ -35,21 +35,28 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
       }
     });
   }
-
   prepareMaterial(original) {
     const material = super.prepareMaterial(original);
-    if (/^(body|paint|carpaint|car_paint)$/i.test(original.name || '')) {
-      material.metalness = .48;
-      material.roughness = .29;
+    const name = original.name || '';
+    if (/^(body|paint|carpaint|car_paint)$/i.test(name)) {
+      material.metalness = .35;
+      material.roughness = .27;
+      material.clearcoat = .72;
+      material.envMapIntensity = .6;
       material.clearcoatRoughness = .16;
+    }
+    if (/glass|window|windscreen/i.test(name) && !/head|tail|light/i.test(name)) {
+      material.color.set(0x141b24);
+      material.opacity = .74;
+      material.roughness = .12;
+      material.metalness = .05;
+      material.envMapIntensity = .3;
     }
     return material;
   }
-
   prepareModel(source) {
-    // The original assembly bakes world transforms into vertex positions. Decode
-    // quantized attributes into float buffers first; otherwise integer writes wrap.
-    source.traverse((node) => {
+    // Transform baking must operate on floats, not quantized integer attributes.
+    source.traverse(node => {
       if (!node.isMesh) return;
       for (const name of ['position', 'normal', 'tangent']) {
         const attribute = node.geometry.getAttribute(name);
@@ -69,10 +76,8 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     this.lastPoseExplosion = NaN;
     this.renderer.shadowMap.needsUpdate = true;
   }
-
   async loadModel() {
-    // Generated before next build and embedded in the client chunk. No extra fetch,
-    // manifest timeout or stale-manifest round trip on the critical loading path.
+    // Generated before next build; embedded in this chunk to remove a manifest round trip.
     const manifest = modelManifest;
     if (!/^\/models\/optimized\/revuelto-[a-f0-9]{12}\.glb$/.test(manifest?.file || '')) {
       throw new Error('The optimized car manifest is invalid. Rebuild the model assets.');
@@ -80,16 +85,15 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     this.modelBytes = manifest.bytes;
     this.modelSource = 'meshopt-webp';
     this.callbacks.onStatus('Loading the Revuelto…');
-    const manager = new THREE.LoadingManager();
-    const failures = [];
-    manager.onError = (url) => failures.push(url);
+    const manager = new THREE.LoadingManager(), failures = [];
+    manager.onError = url => failures.push(url);
     const loader = new GLTFLoader(manager).setMeshoptDecoder(MeshoptDecoder);
     let timer, expired = false, gltf;
-    const loading = loader.loadAsync(manifest.file, (event) => {
+    const loading = loader.loadAsync(manifest.file, event => {
       if (!this.destroyed && event.lengthComputable) {
         this.callbacks.onStatus(`Loading Revuelto · ${Math.min(99, Math.round(event.loaded / event.total * 100))}%`);
       }
-    }).then((result) => {
+    }).then(result => {
       if (expired || this.destroyed) { this.disposeLoaded(result.scene); throw new Error('Loading cancelled'); }
       return result;
     });
@@ -111,11 +115,9 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     await compiling;
     if (this.destroyed) return;
     this.ready = true;
-    this.applyProgress();
-    this.invalidate();
+    this.applyProgress(); this.invalidate();
     this.callbacks.onReady({ parts: this.parts.length, optimized: true });
   }
-
   applyProgress() {
     const poseChanged = this.progress !== this.lastPoseProgress || this.exploded !== this.lastPoseExplosion;
     if (poseChanged) {
@@ -129,8 +131,7 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
         );
         part.group.rotation.set(part.rotation[0] * rest, part.rotation[1] * rest, part.rotation[2] * rest);
       }
-      this.lastPoseProgress = this.progress;
-      this.lastPoseExplosion = this.exploded;
+      this.lastPoseProgress = this.progress; this.lastPoseExplosion = this.exploded;
     }
     const finish = interval(this.progress, .925, 1);
     for (const material of this.lightMaterials) material.emissiveIntensity = this.lightsOn ? finish * 3.2 : 0;
@@ -141,48 +142,34 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     this.lastLights = this.lightsOn;
     if (!this.inspect) this.updateCamera();
   }
-
   applyQuality() {
     if (!this.renderer || !this.width) return;
     const budget = renderBudget({ width: this.width, dpr: devicePixelRatio,
       memory: navigator.deviceMemory || 8, cores: navigator.hardwareConcurrency || 8, quality: this.quality });
     this.renderer.setPixelRatio(budget.pixelRatio);
     this.renderer.setSize(this.width, this.height, false);
-    this.scene.traverse((object) => {
+    this.scene.traverse(object => {
       if (object.isDirectionalLight && object.shadow && object.shadow.mapSize.x !== budget.shadowSize) {
         object.shadow.map?.dispose(); object.shadow.map = null;
         object.shadow.mapSize.setScalar(budget.shadowSize);
       }
     });
-    this.textures.forEach((texture) => { texture.anisotropy = Math.min(budget.anisotropy, this.renderer.capabilities.getMaxAnisotropy()); });
+    this.textures.forEach(texture => { texture.anisotropy = Math.min(budget.anisotropy, this.renderer.capabilities.getMaxAnisotropy()); });
     this.renderer.shadowMap.needsUpdate = true;
-    this.frameSamples = 0;
-    this.invalidate();
+    this.frameSamples = 0; this.invalidate();
   }
-
-  setExploded(on) {
-    this.lastTime = undefined;
-    super.setExploded(on);
-  }
+  setExploded(on) { this.lastTime = undefined; super.setExploded(on); }
   setQuality(quality) {
     if (!QUALITY_MODES.includes(quality)) return;
-    this.quality = quality;
-    this.applyQuality();
+    this.quality = quality; this.applyQuality();
   }
-  resize() {
-    this.lastPoseProgress = NaN;
-    super.resize();
-    this.applyQuality();
-  }
+  resize() { this.lastPoseProgress = NaN; super.resize(); this.applyQuality(); }
   setActive(active) {
     this.active = Boolean(active);
     if (!this.active) { cancelAnimationFrame(this.requestId); this.requestId = 0; }
     else { this.lastTime = undefined; this.invalidate(); }
   }
-  invalidate() {
-    if (this.active === false) return;
-    super.invalidate();
-  }
+  invalidate() { if (this.active !== false) super.invalidate(); }
   draw(time) {
     this.requestId = 0;
     if (this.destroyed || this.active === false || document.hidden) return;
@@ -205,8 +192,7 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
       if (ratio !== this.renderer.getPixelRatio()) {
         this.renderer.setPixelRatio(ratio);
         this.renderer.setSize(this.width, this.height, false);
-        this.frameSamples = 0;
-        resolutionChanged = true;
+        this.frameSamples = 0; resolutionChanged = true;
       }
     }
     this.lastFrameProgress = this.progress;

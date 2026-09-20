@@ -1,0 +1,49 @@
+name: Landing page quality
+on:
+  push:
+    branches: [master, premium-experience]
+  pull_request:
+    branches: [master]
+permissions:
+  contents: read
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+      - name: Build and verify real car experience
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
+      - name: Report checks and preview captures
+        if: always()
+        shell: bash
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs/promises';
+          const path = 'public/diagnostics/premium.json';
+          try {
+            const r = JSON.parse(await fs.readFile(path, 'utf8'));
+            delete r.servedManifest; delete r.browserManifest;
+            if (r.optimization) delete r.optimization.textures;
+            console.log('BROWSER_REPORT', JSON.stringify(r));
+            const sharp = (await import('sharp')).default;
+            for (const name of ['premium-desktop','premium-mobile']) {
+              try {
+                const image = await sharp(`public/diagnostics/${name}.webp`).resize({width:560,withoutEnlargement:true}).webp({quality:50}).toBuffer();
+                console.log('VISUAL_REVIEW_' + name, image.toString('base64'));
+              } catch {}
+            }
+          } catch(e) { console.log('Browser report not produced:', String(e)); }
+          NODE

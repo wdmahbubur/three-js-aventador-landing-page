@@ -9,7 +9,11 @@ export function interval(progress, start, end) {
   return smoother((progress - start) / (end - start));
 }
 export function normalizedScroll(scrollY, top, trackHeight, viewportHeight) {
-  return clamp01((scrollY - top) / Math.max(1, trackHeight - viewportHeight));
+  // Match the whole-CSS-pixel endpoint used by chapter jumps and ScrollTrigger.
+  // Fractional svh heights must still yield an exactly complete final reveal.
+  const start = Math.round(top);
+  const end = Math.round(top + trackHeight - viewportHeight);
+  return clamp01((scrollY - start) / Math.max(1, end - start));
 }
 export function chapterIndex(progress) {
   let index = 0;

@@ -1,6 +1,7 @@
 import { CHAPTERS, FINISHES } from './config.mjs';
 import { clamp01, chapterIndex, interval, normalizedScroll } from './timeline.mjs';
 import { allowAutomatic3D, QUALITY_MODES } from './performance.mjs';
+import { synchronizeScrollAnimation } from './scroll-sync.mjs';
 
 /** Mount the DOM story and optional GPU renderer with complete teardown. */
 export function mountExperience(root) {
@@ -18,7 +19,8 @@ export function mountExperience(root) {
   let current = reduced ? 1 : 0, currentChapter = -1, lastPercent = -1;
   let inspecting = false, exploded = false, lights = true;
   let gsap, ScrollTrigger, scrollTween, scrollTrigger;
-  let frame = 0, lastFocus, idleTask;
+  let frame = 0, settleFrame = 0, lastFocus, idleTask;
+  let cabinMode = 'exterior', cabinFocus, cabinReturnProgress = 1, restoringCabinScroll = false;
   let graphicsStarted = false, stageActive = true, quality = 'auto';
   try { const saved = localStorage.getItem('revuelto-quality'); if (QUALITY_MODES.includes(saved)) quality = saved; } catch {}
   $('[data-quality]').value = quality;
@@ -50,8 +52,58 @@ export function mountExperience(root) {
     engine?.setExploded(exploded);
     $('[data-action="explode"]').setAttribute('aria-pressed', String(exploded));
   }
+  function syncCabin(state) {
+    const wasInside = cabinMode !== 'exterior';
+    const leaving = wasInside && state.mode === 'exterior';
+    if (!wasInside && state.mode !== 'exterior') cabinReturnProgress = current;
+    // A resize must not let ScrollTrigger disassemble the car while seated.
+    if (leaving) restoringCabinScroll = true;
+    cabinMode = state.mode;
+    const active = cabinMode !== 'exterior', busy = ['entering', 'exiting'].includes(cabinMode);
+    root.dataset.cabin = cabinMode;
+    document.documentElement.classList.toggle('cabin-locked', active);
+    if (active) engine?.setActive(true);
+    $('[data-cabin-overlay]').hidden = !active;
+    controls.inert = active;
+    $('.chapter-rail').inert = active;
+    $('.stage-bottom').inert = active;
+    $('.quality-control').inert = active;
+    $('.site-header').inert = active;
+    for (const action of ['doors', 'interior', 'cabin-doors']) $('[data-action="' + action + '"]').disabled = !state.available || busy;
+    $('[data-action="doors"]').setAttribute('aria-pressed', String(state.doorsOpen));
+    $('[data-action="cabin-doors"]').setAttribute('aria-pressed', String(state.doorsOpen));
+    $('[data-door-label]').textContent = state.doorsOpen ? 'CLOSE DOORS' : 'OPEN DOORS';
+    $('[data-cabin-door-label]').textContent = state.doorsOpen ? 'CLOSE DOORS' : 'OPEN DOORS';
+    $('[data-cabin-title]').textContent = cabinMode === 'inside' ? 'THE DRIVER’S SEAT.' : cabinMode === 'exiting' ? 'BACK TO THE SHOWROOM.' : 'TAKE YOUR SEAT.';
+    $('[data-cabin-status]').textContent = cabinMode === 'inside' ? 'Look around. Explore every detail.' : cabinMode === 'exiting' ? 'Returning to the exterior view…' : 'Opening the doors and entering the cabin…';
+    for (const action of ['cabin-left', 'cabin-front', 'cabin-passenger']) $('[data-action="' + action + '"]').disabled = cabinMode !== 'inside';
+    if (leaving) {
+      // The viewport may have rotated. Restore the reveal in the NEW scroll bounds,
+      // rather than restoring a now-invalid pixel offset from the old viewport.
+      if (!destroyed) {
+        ScrollTrigger?.refresh();
+        const { top, height, viewport } = geometry();
+        const position = top + cabinReturnProgress * Math.max(0, height - viewport);
+        window.scrollTo({ top: position, behavior: 'instant' });
+        ScrollTrigger?.update(true);
+      }
+      restoringCabinScroll = false;
+      if (!destroyed) {
+        settleScrollPose();
+        engine?.setActive(true);
+        cabinFocus?.focus({ preventScroll: true });
+      }
+    }
+    if (active) announce(cabinMode === 'inside' ? 'Inside the cabin. Drag or use arrow keys to look around. Escape exits.' : $('[data-cabin-status]').textContent);
+  }
+  function enterInterior() {
+    if (!ready) return;
+    cabinFocus = $('[data-action="interior"]');
+    setInspect(false); setExplode(false);
+    if (!engine.setInterior(true)) announce('Interior is available after the car is fully assembled.');
+  }
   function update(progress) {
-    if (destroyed) return;
+    if (destroyed || cabinMode !== 'exterior' || restoringCabinScroll) return;
     const next = reduced ? 1 : clamp01(progress);
     if (next === current && currentChapter >= 0) return;
     current = next;
@@ -106,20 +158,29 @@ export function mountExperience(root) {
   function requestUpdate() {
     if (!frame && !destroyed && !scrollTrigger) frame = requestAnimationFrame(updateFromScroll);
   }
+  function settleScrollPose(trigger = scrollTrigger) {
+    if (destroyed || cabinMode !== 'exterior' || restoringCabinScroll) return;
+    const { top, height, viewport } = geometry();
+    synchronizeScrollAnimation(trigger, reduced ? 1 : normalizedScroll(scrollY, top, height, viewport), update);
+  }
   function jump(progress, immediate = false) {
+    engine?.resetCabin();
     setInspect(false); setExplode(false);
     if (reduced && progress < .93) {
       setMotion(false, true);
       requestAnimationFrame(() => jump(progress, immediate));
       return;
     }
-    // Synchronize cached trigger bounds before a jump after viewport/orientation changes.
     ScrollTrigger?.refresh();
     const { top, height, viewport } = geometry();
     window.scrollTo({ top: top + clamp01(progress) * Math.max(0, height - viewport), behavior: reduced || immediate ? 'instant' : 'smooth' });
     if (immediate || reduced) {
-      scrollTrigger?.update();
-      scrollTrigger?.getTween()?.progress(1);
+      // The static update invalidates ScrollTrigger's cached native scroll position.
+      // Completing an old scrub tween after refresh can replay its PRE-resize target.
+      ScrollTrigger?.update(true);
+      settleScrollPose();
+      cancelAnimationFrame(settleFrame);
+      settleFrame = requestAnimationFrame(() => { settleFrame = 0; settleScrollPose(); });
       requestUpdate();
     }
   }
@@ -132,15 +193,11 @@ export function mountExperience(root) {
         value: 1, duration: 1, ease: 'none', onUpdate: () => update(proxy.value),
         scrollTrigger: {
           trigger: track, start: 'top top', end: 'bottom bottom', scrub: .55,
-          onRefresh: self => {
-            // Layout refresh is not a new assembly: restore the actual scroll pose.
-            self.getTween()?.progress(1);
-            self.animation?.progress(self.progress);
-          }
+          onRefresh: self => settleScrollPose(self)
         }
       });
       scrollTrigger = scrollTween.scrollTrigger;
-      ScrollTrigger.refresh(); scrollTrigger.update();
+      ScrollTrigger.refresh(); ScrollTrigger.update(true); settleScrollPose();
     } else updateFromScroll();
   }
   function setMotion(value, persist = false) {
@@ -150,8 +207,7 @@ export function mountExperience(root) {
     $('[data-action="motion"]').setAttribute('aria-pressed', String(reduced));
     $('[data-reduced-notice]').hidden = !reduced || engineError;
     if (persist) { storedMotion = reduced ? 'reduced' : 'full'; try { localStorage.setItem('revuelto-motion', storedMotion); } catch {} }
-    setInspect(false); setExplode(false);
-    engine?.setReduced(reduced);
+    setInspect(false); setExplode(false); engine?.setReduced(reduced);
     currentChapter = -1; installScroll();
     requestAnimationFrame(() => { if (!destroyed) { ScrollTrigger?.refresh(); requestUpdate(); } });
   }
@@ -162,8 +218,7 @@ export function mountExperience(root) {
     $('[data-error-message]').textContent = '3D could not load. You can still explore the design below.';
     setStatus('3D unavailable · design story available.');
     $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach(button => { button.disabled = true; });
-    engine?.dispose();
-    console.warn('[Revuelto] 3D initialization failed:', error);
+    engine?.dispose(); console.warn('[Revuelto] 3D initialization failed:', error);
   }
   root.addEventListener('click', event => {
     const target = event.target instanceof Element ? event.target.closest('[data-action], [data-jump], [data-finish]') : null;
@@ -189,6 +244,12 @@ export function mountExperience(root) {
         const top = geometry().top;
         setMotion(!reduced, true); window.scrollTo({ top, behavior: 'instant' }); break;
       }
+      case 'doors': case 'cabin-doors': engine?.setDoors(!engine.getState().cabin.doorsOpen); break;
+      case 'interior': enterInterior(); break;
+      case 'exit-interior': engine?.setInterior(false); break;
+      case 'cabin-front': engine?.setCabinView('dashboard'); break;
+      case 'cabin-left': engine?.setCabinView('left'); break;
+      case 'cabin-passenger': engine?.setCabinView('passenger'); break;
       case 'inspect': setInspect(!inspecting); break;
       case 'explode': setExplode(!exploded); break;
       case 'lights': lights = !lights; engine?.setLights(lights); target.setAttribute('aria-pressed', String(lights)); break;
@@ -210,7 +271,18 @@ export function mountExperience(root) {
     const rect = dialog.getBoundingClientRect();
     if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) dialog.close();
   }, { signal });
-  document.addEventListener('keydown', event => { if (event.key === 'Escape' && inspecting) setInspect(false); }, { signal });
+  document.addEventListener('keydown', event => {
+    if (cabinMode !== 'exterior') {
+      if (event.key === 'Escape') { event.preventDefault(); engine?.setInterior(false); }
+      if (event.key === 'Tab') {
+        const focusable = [$('[data-canvas-host] canvas'), ...$('[data-cabin-overlay]').querySelectorAll('button:not(:disabled)')].filter(Boolean);
+        const index = focusable.indexOf(document.activeElement);
+        const next = (index + (event.shiftKey ? -1 : 1) + focusable.length) % focusable.length;
+        event.preventDefault(); focusable[next]?.focus({ preventScroll: true });
+      }
+      if (['PageDown', 'PageUp', 'End', ' '].includes(event.key) && event.target?.tagName !== 'BUTTON') event.preventDefault();
+    } else if (event.key === 'Escape' && inspecting) setInspect(false);
+  }, { signal });
   media.addEventListener('change', () => { if (!storedMotion) setMotion(media.matches); }, { signal });
   window.addEventListener('scroll', requestUpdate, { passive: true, signal });
   window.addEventListener('resize', requestUpdate, { passive: true, signal });
@@ -223,7 +295,7 @@ export function mountExperience(root) {
     if (graphicsStarted || destroyed) return;
     graphicsStarted = true; engineError = false;
     root.dataset.engine = 'loading'; $('[data-load-error]').hidden = true;
-    import('./premium-renderer.mjs').then(({ AssemblyEngine }) => {
+    import('./cabin-renderer.mjs').then(({ AssemblyEngine }) => {
       if (destroyed) return;
       engine = new AssemblyEngine($('[data-canvas-host]'), {
         reduced,
@@ -233,8 +305,9 @@ export function mountExperience(root) {
           ready = true; engineError = false; root.dataset.engine = 'ready';
           $('[data-load-error]').hidden = true; $('[data-reduced-notice]').hidden = !reduced;
           $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach(button => { button.disabled = false; });
-          engine?.setProgress(current); engine?.setQuality(quality); engine?.setActive(stageActive); stateStatus();
+          engine?.setProgress(current); engine?.setQuality(quality); engine?.setActive(stageActive); engine?.emitCabinState(); stateStatus();
         },
+        onCabinState: syncCabin,
         onError: fail, onExitInspect: () => setInspect(false)
       });
       engine.setProgress(current); engine.setQuality(quality); engine.setActive(stageActive);
@@ -249,7 +322,7 @@ export function mountExperience(root) {
     $('[data-action="retry"]').textContent = 'ENABLE 3D'; setStatus('Data Saver · enable 3D when ready.');
   }
   const stageObserver = new IntersectionObserver(([entry]) => {
-    stageActive = entry.isIntersecting; engine?.setActive(stageActive);
+    stageActive = entry.isIntersecting; engine?.setActive(stageActive || cabinMode !== 'exterior');
   });
   stageObserver.observe(track);
   const editorialObserver = new IntersectionObserver(entries => {
@@ -263,7 +336,7 @@ export function mountExperience(root) {
     if (destroyed) return;
     gsap = core.gsap || core.default; ScrollTrigger = plugin.ScrollTrigger || plugin.default;
     gsap.registerPlugin(ScrollTrigger); installScroll();
-  }).catch(() => { /* Native scroll mapping remains available. */ });
+  }).catch(() => {});
   if (new URLSearchParams(location.search).has('debug') || root.hasAttribute('data-debug')) {
     window.__REVUELTO__ = {
       getState: () => ({ progress: current, chapter: currentChapter, reduced, ready, engineError, inspect: inspecting, ...engine?.getState(),
@@ -272,7 +345,7 @@ export function mountExperience(root) {
     };
   }
   return () => {
-    destroyed = true; abort.abort(); cancelAnimationFrame(frame);
+    destroyed = true; document.documentElement.classList.remove('cabin-locked'); abort.abort(); cancelAnimationFrame(frame); cancelAnimationFrame(settleFrame);
     if ('cancelIdleCallback' in window) cancelIdleCallback(idleTask); else clearTimeout(idleTask);
     stageObserver.disconnect(); editorialObserver.disconnect(); resizeObserver.disconnect(); scrollTrigger?.kill(); scrollTween?.kill();
     engine?.dispose(); if (dialog.open) dialog.close();

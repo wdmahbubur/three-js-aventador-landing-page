@@ -1,0 +1,34 @@
+/* Optional cabin controls. The original assembly remains the default experience. */
+html{scrollbar-gutter:stable}html.cabin-locked{overflow:hidden;overscroll-behavior:none}
+.reveal-controls{flex-wrap:wrap;justify-content:center;width:max-content;max-width:92%}
+.cabin-entry-actions{display:flex;align-items:center;gap:8px;border-left:1px solid var(--line);padding-left:14px}
+.cabin-enter{border-color:#b8aa9160!important;color:var(--gold);background:#b8aa9110}
+.cabin-entry-actions .control-button{white-space:nowrap}
+.cabin-overlay{position:absolute;inset:0;z-index:15;pointer-events:none;background:linear-gradient(#050608b3,transparent 23%,transparent 67%,#050608dc)}
+.cabin-top{position:absolute;top:6%;left:5%;right:5%;display:flex;justify-content:space-between;gap:20px;align-items:flex-start}
+.cabin-top h2{font:600 clamp(24px,3vw,44px)/1.05 var(--display);letter-spacing:.025em;margin:12px 0 8px}
+.cabin-top p:last-child{color:#c4c7cd;font-size:12px;line-height:1.6}
+.cabin-exit{pointer-events:auto;background:#0b0e14de;min-height:44px;white-space:nowrap;border:1px solid #b8aa9160}
+.cabin-bottom{position:absolute;bottom:max(25px,env(safe-area-inset-bottom));left:5%;right:5%;text-align:center}
+.cabin-help{font:9px/1.8 var(--mono);letter-spacing:.07em;color:#c5c8ce}.cabin-help span{margin:0 12px;color:var(--gold)}
+.cabin-presets{pointer-events:auto;display:inline-flex;gap:4px;border:1px solid #ffffff24;background:#0b0e14e8;padding:5px;margin:15px 0 12px}
+.cabin-presets button{padding:0 17px;min-height:42px;color:#d9d9d4;font:9px var(--mono);letter-spacing:.03em}
+.cabin-presets button:hover,.cabin-presets button:focus-visible{background:#b8aa9120;color:var(--gold)}
+.cabin-presets [data-action=cabin-doors]{border-left:1px solid var(--line);color:var(--gold)}
+.cabin-note{font:7px/1.5 var(--mono);letter-spacing:.18em;color:#949ca8}
+.experience[data-cabin=entering] .canvas-host,.experience[data-cabin=inside] .canvas-host,.experience[data-cabin=exiting] .canvas-host{z-index:10}
+.experience[data-cabin=entering] .canvas-host canvas,.experience[data-cabin=inside] .canvas-host canvas,.experience[data-cabin=exiting] .canvas-host canvas{touch-action:none}
+.experience[data-cabin=inside] .canvas-host canvas{cursor:grab}.experience[data-cabin=inside] .canvas-host canvas:active{cursor:grabbing}
+.experience[data-cabin=entering] :is(.chapter-copy,.chapter-rail,.stage-bottom,.reveal-controls,.quality-control,.edition-tag,.scene-coordinate,.stage-wordmark,.reduced-notice),
+.experience[data-cabin=inside] :is(.chapter-copy,.chapter-rail,.stage-bottom,.reveal-controls,.quality-control,.edition-tag,.scene-coordinate,.stage-wordmark,.reduced-notice),
+.experience[data-cabin=exiting] :is(.chapter-copy,.chapter-rail,.stage-bottom,.reveal-controls,.quality-control,.edition-tag,.scene-coordinate,.stage-wordmark,.reduced-notice){visibility:hidden;pointer-events:none}
+@media(max-width:1150px){.cabin-entry-actions{border:0;border-top:1px solid var(--line);padding:7px 0 0;justify-content:center;flex-basis:100%}.reveal-controls{gap:6px 14px}}
+@media(max-width:760px){.reveal-controls{max-width:none;width:auto;bottom:13.5%}.cabin-entry-actions{flex-basis:auto;width:100%;gap:10px;padding-top:5px}.cabin-entry-actions .control-button{font-size:8px;min-height:38px}.cabin-top{top:5%;left:6%;right:6%;gap:10px}.cabin-top .eyebrow{font-size:7px;letter-spacing:.07em}.cabin-top h2{font-size:25px;max-width:190px;margin-top:10px}.cabin-top p:last-child{font-size:10px;max-width:170px}.cabin-exit{font-size:8px;padding:0 10px;gap:7px}.cabin-exit svg{width:14px}.cabin-bottom{left:4%;right:4%;bottom:max(20px,env(safe-area-inset-bottom))}.cabin-help{font-size:7px;letter-spacing:0;max-width:270px;margin-inline:auto}.cabin-help span{margin:0 4px}.cabin-presets{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;max-width:330px;margin:12px auto 10px}.cabin-presets button{padding:0 8px;font-size:8px;min-height:38px}.cabin-presets [data-action=cabin-doors]{border-left:0}.cabin-note{font-size:6px}}
+@media(max-height:690px) and (max-width:760px){.reveal-controls{bottom:18%;padding:3px 6px}.cabin-entry-actions .control-button{min-height:32px}.cabin-entry-actions{padding-top:3px}.experience[data-phase="7"] .chapter-copy{top:22%}}
+@media(max-height:500px) and (orientation:landscape){.reveal-controls{bottom:21%;flex-wrap:nowrap;max-width:94%;width:max-content;gap:5px;padding:4px}.cabin-entry-actions{border-top:0;border-left:1px solid var(--line);flex-basis:auto;width:auto;padding:0 0 0 7px}.reveal-controls .control-button{font-size:7px;min-height:32px;padding:0 5px}.reveal-controls .finish-name,.reveal-controls .control-caption{display:none}.cabin-top{top:6%;left:4%;right:4%}.cabin-top h2{font-size:24px;margin:6px 0}.cabin-top .eyebrow{font-size:7px}.cabin-top p:last-child{display:none}.cabin-bottom{bottom:12px}.cabin-help{font-size:7px}.cabin-presets{display:inline-flex;margin:8px 0 0;padding:3px}.cabin-presets button{min-height:32px;font-size:8px}.cabin-note{display:none}}
+
+/* Keep the seated camera in the viewport while scroll is locked, including rotation.
+   The assembly track keeps its height so the exterior scroll position can be restored. */
+.experience:is([data-cabin=entering],[data-cabin=inside],[data-cabin=exiting]) .stage{
+  position:fixed;inset:0;width:100%;height:100dvh;min-height:0;z-index:50;
+}

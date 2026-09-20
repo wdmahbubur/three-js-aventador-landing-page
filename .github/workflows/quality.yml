@@ -1,7 +1,7 @@
 name: Landing page quality
 on:
   push:
-    branches: [master, premium-experience]
+    branches: [master, premium-experience, cabin-experience]
   pull_request:
     branches: [master]
 permissions:

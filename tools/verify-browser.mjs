@@ -1,12 +1,10 @@
-/** Real Chromium + WebGL integration check. No mocked engine or procedural car. */
+/** Real Chromium + WebGL integration checks, never a mock renderer. */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
-
-const port = 3177, base = `http://127.0.0.1:${port}`;
-const output = path.resolve('public/diagnostics');
+const port = 3177, base = `http://127.0.0.1:${port}`, output = path.resolve('public/diagnostics');
 await fs.mkdir(output, { recursive: true });
 const checks = [], runtimeErrors = [], requestsFailed = [];
 const report = { passed: false, renderedInBrowser: false, renderer: 'Chromium / software WebGL', checks, runtimeErrors, requestsFailed };
@@ -16,35 +14,26 @@ function check(name, passed, detail) {
   checks.push({ name, passed: Boolean(passed), ...(detail === undefined ? {} : { detail }) });
   if (!passed) throw new Error(name + (detail === undefined ? '' : ': ' + JSON.stringify(detail)));
 }
-async function state(page) { return page.evaluate(() => window.__REVUELTO__.getState()); }
+const state = page => page.evaluate(() => window.__REVUELTO__.getState());
 async function seek(page, progress) {
   await page.evaluate(p => window.__REVUELTO__.seek(p), progress);
-  await page.waitForFunction(p => Math.abs(window.__REVUELTO__.getState().progress - p) < .004, { timeout: 25000 }, progress);
+  // Endpoints must really finish, not just approach them within a loose tolerance.
+  await page.waitForFunction(p => Math.abs(window.__REVUELTO__.getState().progress - p) < (p === 0 || p === 1 ? .000001 : .001), { timeout: 30000 }, progress);
   await pause(900);
 }
-async function screenshot(page, name) {
-  await page.screenshot({ path: path.join(output, `${name}.webp`), type: 'webp', quality: 82 });
-}
+const screenshot = (page, name) => page.screenshot({ path: path.join(output, `${name}.webp`), type: 'webp', quality: 82 });
 try {
   report.optimization = JSON.parse(await fs.readFile('public/models/optimized/manifest.json', 'utf8'));
-  report.optimizedFiles = await fs.readdir('public/models/optimized');
-  server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port)], {
-    env: { ...process.env, NODE_ENV: 'production' }, stdio: ['ignore', 'pipe', 'pipe']
-  });
-  let serverLog = '';
+  server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port)], { env: { ...process.env, NODE_ENV: 'production' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  let serverLog = '', available = false;
   for (const stream of [server.stdout, server.stderr]) stream.on('data', data => { serverLog = (serverLog + data.toString()).slice(-8000); });
-  let available = false;
   for (let i = 0; i < 60; i++) {
     try { if ((await fetch(base)).ok) { available = true; break; } } catch {}
     if (server.exitCode !== null) break;
     await pause(500);
   }
   check('Production server starts', available, available ? undefined : serverLog);
-  const manifestResponse = await fetch(base + '/models/optimized/manifest.json');
-  report.servedManifest = { status: manifestResponse.status, body: (await manifestResponse.text()).slice(0, 12000) };
-  browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || await chromium.executablePath(),
-    args: [...chromium.args, '--enable-unsafe-swiftshader'], headless: 'shell',
-    defaultViewport: { width: 1440, height: 900, deviceScaleFactor: 1 }, protocolTimeout: 180000 });
+  browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || await chromium.executablePath(), args: [...chromium.args, '--enable-unsafe-swiftshader'], headless: 'shell', defaultViewport: { width: 1440, height: 900, deviceScaleFactor: 1 }, protocolTimeout: 180000 });
   page = await browser.newPage();
   page.on('pageerror', error => runtimeErrors.push(String(error)));
   page.on('console', message => { if (message.type() === 'error') runtimeErrors.push(message.text()); });
@@ -52,13 +41,12 @@ try {
   await page.goto(base + '/?debug', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => window.__REVUELTO__?.getState().ready || window.__REVUELTO__?.getState().engineError, { timeout: 180000 });
   const opening = await state(page);
-  await screenshot(page, 'premium-opening');
   check('Actual compressed model loads', opening.ready && opening.optimizedModel, opening);
   check('Car has independent assembly parts', opening.parts > 20, opening.parts);
   check('Empty opening has zero visible car parts', opening.visibleParts === 0);
   await pause(1800);
-  const idleA = await state(page); await pause(450); const idleB = await state(page);
-  check('GPU sleeps when the opening is idle', idleB.renderCount - idleA.renderCount <= 1);
+  const idleA = await state(page); await pause(450);
+  check('GPU sleeps when the opening is idle', (await state(page)).renderCount - idleA.renderCount <= 1);
   await screenshot(page, 'premium-opening');
   await seek(page, .7);
   const partial = await state(page);
@@ -99,9 +87,7 @@ try {
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await seek(page, 1);
     check(`No horizontal overflow at ${width}×${height}`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1));
-    check(`Controls fit the viewport at ${width}×${height}`, await page.$eval('[data-reveal-controls]', el => {
-      const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight;
-    }));
+    check(`Controls fit the viewport at ${width}×${height}`, await page.$eval('[data-reveal-controls]', el => { const r = el.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight; }));
     if (width === 390) await screenshot(page, 'premium-mobile');
   }
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
@@ -139,15 +125,11 @@ try {
   report.passed = true;
 } catch (error) {
   report.error = error.stack || String(error);
-  if (page) {
-    try {
-      report.failureState = await state(page);
-      report.failureLayout = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, scrollY,
-        explodedPressed: document.querySelector('[data-action="explode"]').getAttribute('aria-pressed'),
-        track: document.querySelector('.assembly-track').getBoundingClientRect().toJSON() }));
-      await screenshot(page, 'premium-failure');
-    } catch {}
-  }
+  if (page) try {
+    report.failureState = await state(page);
+    report.failureLayout = await page.evaluate(() => ({ width: innerWidth, height: innerHeight, scrollY, explodedPressed: document.querySelector('[data-action="explode"]').getAttribute('aria-pressed'), track: document.querySelector('.assembly-track').getBoundingClientRect().toJSON() }));
+    await screenshot(page, 'premium-failure');
+  } catch {}
   console.error('Browser verification failed:', report.error);
 } finally {
   if (browser) await browser.close().catch(() => {});

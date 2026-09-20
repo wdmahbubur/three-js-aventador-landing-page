@@ -12,3 +12,9 @@ export function nextAdaptiveRatio(ratio, frameMs, samples, quality) {
 export function allowAutomatic3D(connection) {
   return !(connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType || ''));
 }
+/** Exponential easing in elapsed seconds, rather than an FPS-dependent fixed step. */
+export function advanceExplosion(value, target, seconds, reduced = false) {
+  if (reduced) return target;
+  const next = value + (target - value) * (1 - Math.exp(-Math.max(0, seconds) * 8));
+  return Math.abs(next - target) <= .001 ? target : next;
+}

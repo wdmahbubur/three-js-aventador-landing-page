@@ -4,7 +4,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { AssemblyEngine as HeadlightAssemblyEngine } from './engine.mjs';
 import { interval } from './timeline.mjs';
-import { renderBudget, nextAdaptiveRatio, QUALITY_MODES } from './performance.mjs';
+import { renderBudget, nextAdaptiveRatio, QUALITY_MODES, advanceExplosion } from './performance.mjs';
 
 /** Optimizes the existing real-model assembly, without changing its part hierarchy. */
 export class AssemblyEngine extends HeadlightAssemblyEngine {
@@ -102,7 +102,6 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     if (failures.length) { this.disposeLoaded(gltf.scene); throw new Error('A car texture failed to decode.'); }
     this.callbacks.onStatus('Preparing the showroom lighting…');
     this.prepareModel(gltf.scene);
-    // Compile once before the reveal. Restore the requested pose before the next frame.
     const progress = this.progress;
     this.progress = 1;
     this.applyProgress();
@@ -118,7 +117,6 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
   }
 
   applyProgress() {
-    // Reuse transforms instead of allocating several arrays and pose objects per mesh/frame.
     const poseChanged = this.progress !== this.lastPoseProgress || this.exploded !== this.lastPoseExplosion;
     if (poseChanged) {
       for (const part of this.parts) {
@@ -162,6 +160,10 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     this.invalidate();
   }
 
+  setExploded(on) {
+    this.lastTime = undefined;
+    super.setExploded(on);
+  }
   setQuality(quality) {
     if (!QUALITY_MODES.includes(quality)) return;
     this.quality = quality;
@@ -182,10 +184,21 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
     super.invalidate();
   }
   draw(time) {
-    if (this.active === false) { this.requestId = 0; return; }
-    const elapsed = time - (this.lastSampleTime || time);
-    this.lastSampleTime = time;
-    if (elapsed > 5 && elapsed < 120) {
+    this.requestId = 0;
+    if (this.destroyed || this.active === false || document.hidden) return;
+    const elapsed = time - (this.lastTime || time - 16);
+    const delta = Math.min(.5, Math.max(.001, elapsed / 1000));
+    this.lastTime = time;
+    const moving = this.exploded !== this.explodeTarget;
+    if (moving) {
+      this.exploded = advanceExplosion(this.exploded, this.explodeTarget, delta, this.reduced);
+      this.applyProgress();
+    }
+    const orbitChanged = this.inspect ? this.controls.update() : false;
+    this.renderer.render(this.scene, this.camera);
+    this.renderCount = (this.renderCount || 0) + 1;
+    let resolutionChanged = false;
+    if ((moving || orbitChanged || this.lastFrameProgress !== this.progress) && elapsed > 5 && elapsed < 3000) {
       this.frameMean = this.frameMean * .9 + elapsed * .1;
       this.frameSamples++;
       const ratio = nextAdaptiveRatio(this.renderer.getPixelRatio(), this.frameMean, this.frameSamples, this.quality);
@@ -193,10 +206,11 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
         this.renderer.setPixelRatio(ratio);
         this.renderer.setSize(this.width, this.height, false);
         this.frameSamples = 0;
+        resolutionChanged = true;
       }
     }
-    super.draw(time);
-    this.renderCount = (this.renderCount || 0) + 1;
+    this.lastFrameProgress = this.progress;
+    if (this.exploded !== this.explodeTarget || orbitChanged || resolutionChanged) this.invalidate();
   }
   getState() {
     return { ...super.getState(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(),

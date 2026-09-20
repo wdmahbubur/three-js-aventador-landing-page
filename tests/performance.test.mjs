@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { renderBudget, nextAdaptiveRatio, allowAutomatic3D } from '../src/lib/performance.mjs';
+import { renderBudget, nextAdaptiveRatio, allowAutomatic3D, advanceExplosion } from '../src/lib/performance.mjs';
 
 test('Auto mode caps desktop DPR instead of rendering every physical screen pixel', () => assert.equal(renderBudget({ dpr: 3 }).pixelRatio, 1.6));
 test('Auto mode budgets handheld pixels and shadow-map memory', () => assert.deepEqual(renderBudget({ width: 390, dpr: 3 }), { pixelRatio: 1.25, shadowSize: 512, anisotropy: 2 }));
@@ -13,3 +13,10 @@ test('Adaptive resolution cannot fall below the readability floor', () => assert
 test('Data Saver pauses the automatic 3D download', () => assert.equal(allowAutomatic3D({ saveData: true }), false));
 test('Very slow networks do not auto-download the model', () => { assert.equal(allowAutomatic3D({ effectiveType: 'slow-2g' }), false); assert.equal(allowAutomatic3D({ effectiveType: '2g' }), false); });
 test('Normal and unknown connections keep the usual experience', () => { assert.equal(allowAutomatic3D({ effectiveType: '4g' }), true); assert.equal(allowAutomatic3D(undefined), true); });
+test('Explosion opening and closing are independent of frame rate', () => {
+  for (const target of [0, 1]) {
+    const simulate = fps => { let value = 1-target; for (let i=0; i<fps; i++) value=advanceExplosion(value,target,1/fps); return value; };
+    assert.equal(simulate(60), target); assert.equal(simulate(5), target);
+  }
+});
+test('Reduced motion settles explosion in one step', () => assert.equal(advanceExplosion(.7, 0, .001, true), 0));

@@ -1,12 +1,14 @@
 import { CHAPTERS, FINISHES } from './config.mjs';
 import { clamp01, chapterIndex, interval, normalizedScroll } from './timeline.mjs';
+import { allowAutomatic3D, QUALITY_MODES } from './performance.mjs';
 
 /** Mounts both the DOM story and the optional GPU renderer. Returns full cleanup. */
 export function mountExperience(root) {
   const abort = new AbortController();
   const signal = abort.signal;
-  const $ = (selector) => root.querySelector(selector);
-  const $$ = (selector) => [...root.querySelectorAll(selector)];
+  const nodes = new Map(), lists = new Map();
+  const $ = (selector) => { if (!nodes.has(selector)) nodes.set(selector, root.querySelector(selector)); return nodes.get(selector); };
+  const $$ = (selector) => { if (!lists.has(selector)) lists.set(selector, [...root.querySelectorAll(selector)]); return lists.get(selector); };
   const track = $('.assembly-track');
   const intro = $('[data-intro]');
   const story = $('[data-story]');
@@ -22,8 +24,20 @@ export function mountExperience(root) {
   let current = reduced ? 1 : 0, currentChapter = -1, lastPercent = -1;
   let inspecting = false, exploded = false, lights = true;
   let gsap, ScrollTrigger, scrollTween, scrollTrigger;
-  let frame = 0, lastFocus;
+  let frame = 0, lastFocus, idleTask;
+  let graphicsStarted = false, stageActive = true;
+  let quality = 'auto';
+  try { const saved = localStorage.getItem('revuelto-quality'); if (QUALITY_MODES.includes(saved)) quality = saved; } catch {}
+  $('[data-quality]').value = quality;
+  root.dataset.quality = quality;
+  function showFallback() {
+    const image = $('.fallback-image img');
+    if (!image.getAttribute('src')) image.src = image.dataset.fallbackSrc;
+  }
   root.dataset.motion = reduced ? 'reduced' : 'full';
+  document.fonts?.ready.then(() => {
+    if (!destroyed && getComputedStyle(document.documentElement).getPropertyValue('--font-display').trim()) root.dataset.fontsReady = 'true';
+  });
 
   function announce(text) { $('[data-announcement]').textContent = text; }
   function setStatus(text) { if (status.textContent !== text) status.textContent = text; }
@@ -46,7 +60,9 @@ export function mountExperience(root) {
   }
   function update(progress) {
     if (destroyed) return;
-    current = reduced ? 1 : clamp01(progress);
+    const next = reduced ? 1 : clamp01(progress);
+    if (next === current && currentChapter >= 0) return;
+    current = next;
     const index = chapterIndex(current);
     const percent = Math.round(current * 100);
     root.style.setProperty('--progress', String(current));
@@ -76,9 +92,9 @@ export function mountExperience(root) {
     if (percent !== lastPercent) {
       lastPercent = percent;
       $('[data-percent]').textContent = String(percent).padStart(2, '0');
-      $('[data-meter-fill]').style.transform = `scaleX(${current})`;
       meter.setAttribute('aria-valuenow', String(percent));
     }
+    $('[data-meter-fill]').style.transform = `scaleX(${current})`;
     const finished = current >= .965;
     controls.hidden = !finished;
     $$('.stage-actions [data-action="reveal"]').forEach((button) => { button.hidden = finished; });
@@ -134,12 +150,14 @@ export function mountExperience(root) {
     if (persist) { storedMotion = reduced ? 'reduced' : 'full'; try { localStorage.setItem('revuelto-motion', storedMotion); } catch {} }
     setInspect(false); setExplode(false);
     engine?.setReduced(reduced);
+    currentChapter = -1;
     installScroll();
     requestAnimationFrame(() => { if (!destroyed) { ScrollTrigger?.refresh(); requestUpdate(); } });
   }
   function fail(error) {
     if (destroyed) return;
     ready = false; engineError = true; root.dataset.engine = 'error';
+    showFallback();
     $('[data-load-error]').hidden = false;
     $('[data-reduced-notice]').hidden = true;
     $('[data-error-message]').textContent = '3D could not load. You can still explore the design below.';
@@ -178,8 +196,16 @@ export function mountExperience(root) {
       case 'lights': lights = !lights; engine?.setLights(lights); target.setAttribute('aria-pressed', String(lights)); break;
       case 'credits': lastFocus = target; if (!dialog.open) dialog.showModal(); break;
       case 'close-credits': dialog.close(); break;
-      case 'retry': location.reload(); break;
+      case 'retry': graphicsStarted = false; engine?.dispose(); startGraphics(); break;
     }
+  }, { signal });
+  $('[data-quality]').addEventListener('change', (event) => {
+    const value = event.target.value;
+    if (!QUALITY_MODES.includes(value)) return;
+    quality = value; root.dataset.quality = value;
+    engine?.setQuality(value);
+    try { localStorage.setItem('revuelto-quality', value); } catch {}
+    announce(`Rendering quality: ${value}.`);
   }, { signal });
   dialog.addEventListener('close', () => lastFocus?.focus({ preventScroll: true }), { signal });
   dialog.addEventListener('click', (event) => {
@@ -198,24 +224,54 @@ export function mountExperience(root) {
   setMotion(reduced);
   update(reduced ? 1 : current);
 
-  import('./engine.mjs').then(({ AssemblyEngine }) => {
-    if (destroyed) return;
-    engine = new AssemblyEngine($('[data-canvas-host]'), {
-      reduced,
-      onStatus: (text) => { if (!destroyed) setStatus(text); },
-      onReady: () => {
-        if (destroyed) return;
-        ready = true; engineError = false; root.dataset.engine = 'ready';
-        $('[data-load-error]').hidden = true;
-        $('[data-reduced-notice]').hidden = !reduced;
-        $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach((button) => { button.disabled = false; });
-        engine?.setProgress(current); stateStatus();
-      },
-      onError: fail,
-      onExitInspect: () => setInspect(false)
-    });
-    engine.setProgress(current);
-  }).catch(fail);
+  function startGraphics() {
+    if (graphicsStarted || destroyed) return;
+    graphicsStarted = true; engineError = false;
+    root.dataset.engine = 'loading'; $('[data-load-error]').hidden = true;
+    import('./premium-renderer.mjs').then(({ AssemblyEngine }) => {
+      if (destroyed) return;
+      engine = new AssemblyEngine($('[data-canvas-host]'), {
+        reduced,
+        onStatus: (text) => { if (!destroyed) setStatus(text); },
+        onReady: () => {
+          if (destroyed) return;
+          ready = true; engineError = false; root.dataset.engine = 'ready';
+          $('[data-load-error]').hidden = true;
+          $('[data-reduced-notice]').hidden = !reduced;
+          $$('[data-finish], [data-action="inspect"], [data-action="explode"], [data-action="lights"]').forEach((button) => { button.disabled = false; });
+          engine?.setProgress(current); engine?.setQuality(quality); engine?.setActive(stageActive);
+          stateStatus();
+        },
+        onError: fail,
+        onExitInspect: () => setInspect(false)
+      });
+      engine.setProgress(current); engine.setQuality(quality); engine.setActive(stageActive);
+    }).catch(fail);
+  }
+  // Give the opening typography its first paint before GPU and model initialization.
+  if (allowAutomatic3D(navigator.connection)) {
+    if ('requestIdleCallback' in window) idleTask = requestIdleCallback(startGraphics, { timeout: 900 });
+    else idleTask = setTimeout(startGraphics, 80);
+  } else {
+    root.dataset.engine = 'deferred';
+    showFallback();
+    $('[data-load-error]').hidden = false;
+    $('[data-error-message]').textContent = 'Data Saver is on. The 3D download is paused.';
+    $('[data-action="retry"]').textContent = 'ENABLE 3D';
+    setStatus('Data Saver · enable 3D when ready.');
+  }
+  const stageObserver = new IntersectionObserver(([entry]) => {
+    stageActive = entry.isIntersecting;
+    engine?.setActive(stageActive);
+  });
+  stageObserver.observe(track);
+  const editorialObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) {
+      entry.target.classList.add('is-visible'); editorialObserver.unobserve(entry.target);
+    }
+  }, { threshold: .08 });
+  $$('[data-editorial]').forEach((section) => editorialObserver.observe(section));
+  root.dataset.enhanced = 'true';
   Promise.all([import('gsap'), import('gsap/ScrollTrigger')]).then(([core, plugin]) => {
     if (destroyed) return;
     gsap = core.gsap || core.default;
@@ -231,6 +287,8 @@ export function mountExperience(root) {
   }
   return () => {
     destroyed = true; abort.abort(); cancelAnimationFrame(frame);
+    if ('cancelIdleCallback' in window) cancelIdleCallback(idleTask); else clearTimeout(idleTask);
+    stageObserver.disconnect(); editorialObserver.disconnect();
     resizeObserver.disconnect(); scrollTrigger?.kill(); scrollTween?.kill();
     engine?.dispose(); if (dialog.open) dialog.close();
     if (window.__REVUELTO__) delete window.__REVUELTO__;

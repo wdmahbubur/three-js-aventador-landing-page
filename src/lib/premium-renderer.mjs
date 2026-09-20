@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import modelManifest from '../../public/models/optimized/manifest.json';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { AssemblyEngine as HeadlightAssemblyEngine } from './engine.mjs';
@@ -70,15 +71,11 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
   }
 
   async loadModel() {
-    let manifest;
-    try {
-      const response = await fetch('/models/optimized/manifest.json', {
-        cache: 'no-cache', signal: AbortSignal.any([this.abort.signal, AbortSignal.timeout(6000)])
-      });
-      if (response.ok) manifest = await response.json();
-    } catch { if (this.destroyed) return; }
+    // Generated before next build and embedded in the client chunk. No extra fetch,
+    // manifest timeout or stale-manifest round trip on the critical loading path.
+    const manifest = modelManifest;
     if (!/^\/models\/optimized\/revuelto-[a-f0-9]{12}\.glb$/.test(manifest?.file || '')) {
-      return super.loadModel();
+      throw new Error('The optimized car manifest is invalid. Rebuild the model assets.');
     }
     this.modelBytes = manifest.bytes;
     this.modelSource = 'meshopt-webp';

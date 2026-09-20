@@ -6,11 +6,13 @@ A scroll-driven Next.js + Three.js + GSAP landing page. The real, free Revuelto 
 
 Use Node.js 22, run `npm install`, then `npm run dev`. The predev step retrieves the credited model, preserves the source assets, and creates the optimized meshopt/WebP GLB. No paid model, API key, database, or account is needed.
 
-`npm run build` prepares assets, runs the unit and headlight geometry checks, compiles Next.js, then runs Chromium/WebGL acceptance tests. `npm start` serves the production build. Use `CHROMIUM_PATH` to supply a local Chromium executable when the bundled Linux browser is inappropriate for your OS.
+`npm run build` prepares assets, runs unit and headlight/door geometry checks, compiles Next.js, then runs both complete Chromium/WebGL acceptance suites. `npm start` serves the production build. Use `CHROMIUM_PATH` to supply a local Chromium executable when the bundled Linux browser is inappropriate for your OS.
 
 ## Experience
 
 Eight assembly chapters; camera storyboard; forward headlights and floor illumination; three finishes; exploded view; 360-degree inspection; keyboard controls; replay; responsive design; reduced motion; Data Saver opt-in; Auto/High/Eco rendering quality; accessible loading and fallback content.
+
+After the reveal, use **OPEN DOORS** to lift both scissor doors or **ENTER INTERIOR** to move into the driver's seat. Drag or use arrow keys/WASD to look around. Dashboard, Left Door and Passenger presets change the viewing direction. **EXIT INTERIOR** or Escape returns to the showroom. The cabin supports portrait/landscape resizing and reduced-motion entry/exit.
 
 ## Performance
 
@@ -18,9 +20,11 @@ The optimized car combines compressed geometry and WebP textures without joining
 
 ## Deployment and testing
 
-`master` is the Vercel production branch. Feature branches receive previews. Preview builds expose failed browser diagnostics for review; production and GitHub Actions builds fail if browser acceptance fails. Do not treat a READY preview alone as a passed test.
+`master` is the Vercel production branch. Feature branches receive previews. Vercel uses `npm run build:vercel`: asset preparation, optimization, all unit/model-geometry checks and the Next.js production compile. It does not launch the headless-browser acceptance suites inside the deployment builder.
 
-GitHub Actions uploads `premium-browser-review` with the browser screenshots and JSON diagnostics. The generated `public/diagnostics/premium.json` records actual WebGL tests, not a mocked model or a fallback image.
+The full `npm run build` remains the GitHub Actions quality command, including both complete browser suites; CI fails if acceptance fails. Verify the quality check before merging or releasing. A READY Vercel preview alone means packaging succeeded, not that the browser tests ran there.
+
+GitHub Actions uploads `premium-browser-review` with actual-model screenshots and JSON diagnostics, including `premium.json` and `cabin.json`. Those browser reports are CI artifacts, not guaranteed public URLs in a Vercel build. Browser testing uses Chromium/software WebGL and does not establish physical-device FPS or Safari compatibility.
 
 ## Asset scope
 

@@ -26,6 +26,8 @@ async function screenshot(page, name) {
   await page.screenshot({ path: path.join(output, `${name}.webp`), type: 'webp', quality: 82 });
 }
 try {
+  report.optimization = JSON.parse(await fs.readFile('public/models/optimized/manifest.json', 'utf8'));
+  report.optimizedFiles = await fs.readdir('public/models/optimized');
   server = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'start', '-p', String(port)], {
     env: { ...process.env, NODE_ENV: 'production' }, stdio: ['ignore', 'pipe', 'pipe']
   });
@@ -38,6 +40,8 @@ try {
     await pause(500);
   }
   check('Production server starts', available, available ? undefined : serverLog);
+  const manifestResponse = await fetch(base + '/models/optimized/manifest.json');
+  report.servedManifest = { status: manifestResponse.status, body: (await manifestResponse.text()).slice(0, 12000) };
   browser = await puppeteer.launch({ executablePath: process.env.CHROMIUM_PATH || await chromium.executablePath(),
     args: [...chromium.args, '--enable-unsafe-swiftshader'], headless: 'shell',
     defaultViewport: { width: 1440, height: 900, deviceScaleFactor: 1 }, protocolTimeout: 180000 });
@@ -48,6 +52,13 @@ try {
   await page.goto(base + '/?debug', { waitUntil: 'domcontentloaded', timeout: 120000 });
   await page.waitForFunction(() => window.__REVUELTO__?.getState().ready || window.__REVUELTO__?.getState().engineError, { timeout: 180000 });
   const opening = await state(page);
+  report.browserManifest = await page.evaluate(async () => {
+    try {
+      const response = await fetch('/models/optimized/manifest.json', { cache: 'no-cache' });
+      return { status: response.status, body: (await response.text()).slice(0, 12000), signalAny: typeof AbortSignal.any };
+    } catch (error) { return { error: String(error) }; }
+  });
+  await screenshot(page, 'premium-opening');
   check('Actual compressed model loads', opening.ready && opening.optimizedModel, opening);
   check('Car has independent assembly parts', opening.parts > 20, opening.parts);
   check('Empty opening has zero visible car parts', opening.visibleParts === 0);
@@ -111,7 +122,6 @@ try {
   check('Credits remain accessible', await page.$eval('dialog', el => el.open));
   await page.keyboard.press('Escape');
   check('Escape dismisses credits', !(await page.$eval('dialog', el => el.open)));
-
   const reduced = await browser.newPage();
   await reduced.emulateMediaFeatures([{ name: 'prefers-reduced-motion', value: 'reduce' }]);
   await reduced.goto(base + '/?debug', { waitUntil: 'domcontentloaded' });
@@ -132,7 +142,6 @@ try {
   await saver.close();
   check('No uncaught JavaScript or shader errors', runtimeErrors.length === 0, runtimeErrors);
   check('All page assets load', requestsFailed.length === 0, requestsFailed);
-  report.optimization = JSON.parse(await fs.readFile('public/models/optimized/manifest.json', 'utf8'));
   report.passed = true;
 } catch (error) {
   report.error = error.stack || String(error);
@@ -143,6 +152,5 @@ try {
   report.completedAt = new Date().toISOString();
   await fs.writeFile(path.join(output, 'premium.json'), JSON.stringify(report, null, 2));
   console.log(`Browser checks: ${checks.filter(item => item.passed).length}/${checks.length}, passed=${report.passed}`);
-  // Preview publishes the diagnostic report for inspection; production is strictly gated.
   if (!report.passed && process.env.VERCEL_ENV !== 'preview') process.exitCode = 1;
 }

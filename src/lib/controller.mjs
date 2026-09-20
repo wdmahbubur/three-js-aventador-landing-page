@@ -19,7 +19,7 @@ export function mountExperience(root) {
   let inspecting = false, exploded = false, lights = true;
   let gsap, ScrollTrigger, scrollTween, scrollTrigger;
   let frame = 0, lastFocus, idleTask;
-  let cabinMode = 'exterior', cabinFocus;
+  let cabinMode = 'exterior', cabinFocus, cabinReturnProgress = 1, restoringCabinScroll = false;
   let graphicsStarted = false, stageActive = true, quality = 'auto';
   try { const saved = localStorage.getItem('revuelto-quality'); if (QUALITY_MODES.includes(saved)) quality = saved; } catch {}
   $('[data-quality]').value = quality;
@@ -53,10 +53,15 @@ export function mountExperience(root) {
   }
   function syncCabin(state) {
     const wasInside = cabinMode !== 'exterior';
+    const leaving = wasInside && state.mode === 'exterior';
+    if (!wasInside && state.mode !== 'exterior') cabinReturnProgress = current;
+    // A resize must not let ScrollTrigger disassemble the car while seated.
+    if (leaving) restoringCabinScroll = true;
     cabinMode = state.mode;
     const active = cabinMode !== 'exterior', busy = ['entering', 'exiting'].includes(cabinMode);
     root.dataset.cabin = cabinMode;
     document.documentElement.classList.toggle('cabin-locked', active);
+    if (active) engine?.setActive(true);
     $('[data-cabin-overlay]').hidden = !active;
     controls.inert = active;
     $('.chapter-rail').inert = active;
@@ -71,7 +76,24 @@ export function mountExperience(root) {
     $('[data-cabin-title]').textContent = cabinMode === 'inside' ? 'THE DRIVER’S SEAT.' : cabinMode === 'exiting' ? 'BACK TO THE SHOWROOM.' : 'TAKE YOUR SEAT.';
     $('[data-cabin-status]').textContent = cabinMode === 'inside' ? 'Look around. Explore every detail.' : cabinMode === 'exiting' ? 'Returning to the exterior view…' : 'Opening the doors and entering the cabin…';
     for (const action of ['cabin-left', 'cabin-front', 'cabin-passenger']) $('[data-action="' + action + '"]').disabled = cabinMode !== 'inside';
-    if (wasInside && !active) cabinFocus?.focus({ preventScroll: true });
+    if (leaving) {
+      // The viewport may have rotated. Restore the reveal in the NEW scroll bounds,
+      // rather than restoring a now-invalid pixel offset from the old viewport.
+      if (!destroyed) {
+        ScrollTrigger?.refresh();
+        const { top, height, viewport } = geometry();
+        const position = top + cabinReturnProgress * Math.max(0, height - viewport);
+        window.scrollTo({ top: position, behavior: 'instant' });
+        scrollTrigger?.update(); scrollTrigger?.getTween()?.progress(1);
+      }
+      restoringCabinScroll = false;
+      if (!destroyed) {
+        const { top, height, viewport } = geometry();
+        update(reduced ? 1 : normalizedScroll(scrollY, top, height, viewport));
+        engine?.setActive(true);
+        cabinFocus?.focus({ preventScroll: true });
+      }
+    }
     if (active) announce(cabinMode === 'inside' ? 'Inside the cabin. Drag or use arrow keys to look around. Escape exits.' : $('[data-cabin-status]').textContent);
   }
   function enterInterior() {
@@ -81,7 +103,7 @@ export function mountExperience(root) {
     if (!engine.setInterior(true)) announce('Interior is available after the car is fully assembled.');
   }
   function update(progress) {
-    if (destroyed) return;
+    if (destroyed || cabinMode !== 'exterior' || restoringCabinScroll) return;
     const next = reduced ? 1 : clamp01(progress);
     if (next === current && currentChapter >= 0) return;
     current = next;
@@ -289,7 +311,7 @@ export function mountExperience(root) {
     $('[data-action="retry"]').textContent = 'ENABLE 3D'; setStatus('Data Saver · enable 3D when ready.');
   }
   const stageObserver = new IntersectionObserver(([entry]) => {
-    stageActive = entry.isIntersecting; engine?.setActive(stageActive);
+    stageActive = entry.isIntersecting; engine?.setActive(stageActive || cabinMode !== 'exterior');
   });
   stageObserver.observe(track);
   const editorialObserver = new IntersectionObserver(entries => {

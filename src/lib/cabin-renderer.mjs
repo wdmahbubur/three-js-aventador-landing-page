@@ -88,7 +88,9 @@ export class AssemblyEngine extends PremiumEngine {
       this.cabinMode = inside ? 'inside' : 'exterior';
       this.applyProgress();
     }
-    this.emitCabinState(); this.renderer.domElement.focus({ preventScroll: true }); this.invalidate(); return true;
+    this.emitCabinState();
+    if (this.cabinMode !== 'exterior') this.renderer.domElement.focus({ preventScroll: true });
+    this.invalidate(); return true;
   }
   setCabinView(view) {
     if (this.cabinMode !== 'inside') return;
@@ -207,6 +209,8 @@ export class AssemblyEngine extends PremiumEngine {
   getState() {
     return { ...super.getState(), cabin: { mode: this.cabinMode || 'exterior', travel: this.travel || 0,
       available: Boolean(this.doorRig), yaw: this.lookYaw || 0, pitch: this.lookPitch ?? CABIN.pitch,
+      targetYaw: this.targetYaw ?? 0, targetPitch: this.targetPitch ?? CABIN.pitch,
+      lookSettled: this.lookYaw === this.targetYaw && this.lookPitch === this.targetPitch,
       doorsOpen: this.doorTarget === 1, door: this.doorRig?.getState() || null, near: this.camera.near, fov: this.camera.fov,
       cameraPosition: this.camera.position.toArray(), cameraDirection: this.camera.getWorldDirection(new THREE.Vector3()).toArray() } };
   }

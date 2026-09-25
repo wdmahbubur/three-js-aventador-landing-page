@@ -17,6 +17,8 @@ export async function checkUiFoundation({page,check,screenshot,state,seek,pause}
   check('Selected paint survives mode changes',(await state(page)).finish==='arancio');
   await screenshot(page,'ui-photo');
   await page.click('[data-action="clean-photo"]');
+  await page.waitForFunction(()=>{const s=window.__REVUELTO__.getState(),host=document.querySelector('[data-canvas-host]');return Math.abs(s.viewportAspect-host.clientWidth/host.clientHeight)<.001&&Math.abs(s.projectionAspect-s.viewportAspect)<.001},{timeout:10000});
+  check('Clean view keeps the camera projection matched to its resized canvas',Math.abs((await state(page)).projectionAspect-(await state(page)).viewportAspect)<.001);
   check('Clean view hides and inerts the workspace',await page.$eval('[data-reveal-controls]',el=>el.inert&&getComputedStyle(el).visibility==='hidden'));
   check('Clean view exposes a visible escape control',await page.$eval('[data-restore-ui]',el=>!el.hidden&&el.getBoundingClientRect().top>=0));
   await page.keyboard.press('Tab');check('Clean view keyboard focus reaches the canvas',await page.evaluate(()=>document.activeElement.tagName==='CANVAS'));
@@ -40,6 +42,8 @@ export async function checkUiFoundation({page,check,screenshot,state,seek,pause}
       await page.click(`[data-mode-tab="${mode}"]`);
       await page.waitForFunction(mode=>window.__REVUELTO__.getState().ui.mode===mode&&document.querySelector(`[data-mode-tab="${mode}"]`).getAttribute('aria-selected')==='true',{timeout:5000},mode);
       check(`${mode} tab actually activates at ${width}x${height}`,(await state(page)).ui.mode===mode);
+      await page.waitForFunction(()=>{const s=window.__REVUELTO__.getState(),host=document.querySelector('[data-canvas-host]');return Math.abs(s.viewportAspect-host.clientWidth/host.clientHeight)<.001&&Math.abs(s.projectionAspect-s.viewportAspect)<.001},{timeout:10000});
+      check(`${mode} projection matches its actual viewport at ${width}x${height}`,Math.abs((await state(page)).projectionAspect-(await state(page)).viewportAspect)<.001);
       check(`${mode} workspace fits ${width}x${height}`,await page.$eval('[data-reveal-controls]',el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&document.documentElement.scrollWidth<=innerWidth+1}));
     }
     if(width===390)await screenshot(page,'ui-mobile');

@@ -29,3 +29,5 @@ The existing paint test now opens the Customize tab before clicking paint contro
 
 ## Screenshot-review corrections
 The first full browser pass succeeded, but screenshot review exposed a mobile stacking issue: the chapter rail could intercept taps on the Photo tab. The workspace now sits above the rail, and each viewport/mode is checked for real pointer hit-testing and actual state/ARIA activation, not only its bounding box. The final exterior scene reserves 100 CSS pixels beneath the canvas so the workspace does not cover the front of the car; cabin/clean views retain the full viewport.
+
+The renderer resize hook now always refreshes the camera projection, including when orbit inspection owns the camera. This prevents aspect-ratio distortion when Clean View expands the canvas or a phone rotates. Browser checks compare the actual host dimensions, camera aspect and projection matrix at every workspace/viewport. No geometry, materials or authored camera paths changed.

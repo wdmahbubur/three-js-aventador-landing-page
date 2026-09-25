@@ -33,7 +33,13 @@ export async function checkUiFoundation({page,check,screenshot,state,seek,pause}
   for(const [width,height] of [[320,568],[390,844],[768,1024],[844,390]]) {
     await page.setViewport({width,height,deviceScaleFactor:1});await pause(250);await seek(page,1);
     for(const mode of ['explore','customize','photo']) {
+      check(`${mode} tab receives pointer input at ${width}x${height}`,await page.$eval(`[data-mode-tab="${mode}"]`,el=>{
+        const r=el.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);
+        return Boolean(hit&&el.contains(hit));
+      }));
       await page.click(`[data-mode-tab="${mode}"]`);
+      await page.waitForFunction(mode=>window.__REVUELTO__.getState().ui.mode===mode&&document.querySelector(`[data-mode-tab="${mode}"]`).getAttribute('aria-selected')==='true',{timeout:5000},mode);
+      check(`${mode} tab actually activates at ${width}x${height}`,(await state(page)).ui.mode===mode);
       check(`${mode} workspace fits ${width}x${height}`,await page.$eval('[data-reveal-controls]',el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&document.documentElement.scrollWidth<=innerWidth+1}));
     }
     if(width===390)await screenshot(page,'ui-mobile');

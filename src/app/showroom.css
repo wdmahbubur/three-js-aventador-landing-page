@@ -54,3 +54,10 @@
 @media(prefers-reduced-motion:reduce){.workspace-tabs [role=tab]{transition:none}}
 
 html.photo-locked{overflow:hidden;overscroll-behavior:none}
+
+/* Reserve room for the workspace without changing the model or its authored camera path.
+   Cabin and clean view still use the complete viewport. */
+.showroom-workspace.reveal-controls{z-index:12}
+.workspace-tabs [role=tab]:focus-visible{outline:1px solid var(--gold);outline-offset:-5px}
+.experience[data-phase="7"][data-cabin=exterior]:not([data-clean=true]) .canvas-host{bottom:100px}
+.experience[data-mode=photo] .inspect-hint{display:none}

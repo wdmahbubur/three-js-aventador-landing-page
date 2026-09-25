@@ -26,3 +26,6 @@ A narrow synchronous store commit is used when cabin/clean-view layout must be u
 `npm run build:vercel`: unit/geometry checks and production packaging, with browser verification retained in GitHub CI.
 
 The existing paint test now opens the Customize tab before clicking paint controls; its underlying assertions are unchanged. New checks cover tabs/keyboard focus, hidden panels, matching React/renderer state, a stable canvas, clean-view recovery, mode conflicts, responsive layouts and finish persistence. Browser screenshots and diagnostics are saved in the CI artifact. Physical-device FPS, Safari and image-export functionality are not implied by these tests.
+
+## Screenshot-review corrections
+The first full browser pass succeeded, but screenshot review exposed a mobile stacking issue: the chapter rail could intercept taps on the Photo tab. The workspace now sits above the rail, and each viewport/mode is checked for real pointer hit-testing and actual state/ARIA activation, not only its bounding box. The final exterior scene reserves 100 CSS pixels beneath the canvas so the workspace does not cover the front of the car; cabin/clean views retain the full viewport.

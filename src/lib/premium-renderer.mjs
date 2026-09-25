@@ -137,7 +137,7 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
   }
   setExploded(on) { this.lastTime = undefined; super.setExploded(on); }
   setQuality(quality) { if (QUALITY_MODES.includes(quality)) { this.quality = quality; this.applyQuality(); } }
-  resize() { this.lastPoseProgress = NaN; super.resize(); this.applyQuality(); }
+  resize() { this.lastPoseProgress = NaN; super.resize(); this.camera.updateProjectionMatrix(); this.applyQuality(); }
   setActive(active) {
     const rect = this.host.getBoundingClientRect();
     const next = Boolean(active) && rect.bottom > 0 && rect.top < innerHeight;
@@ -170,6 +170,6 @@ export class AssemblyEngine extends HeadlightAssemblyEngine {
   }
   getState() {
     return { ...super.getState(), quality: this.quality, pixelRatio: this.renderer.getPixelRatio(), active: this.active,
-      renderCount: this.renderCount, optimizedModel: this.modelSource === 'meshopt-webp', modelBytes: this.modelBytes || null };
+      renderCount: this.renderCount, viewportAspect: this.width / this.height, projectionAspect: this.camera.projectionMatrix.elements[5] / this.camera.projectionMatrix.elements[0], optimizedModel: this.modelSource === 'meshopt-webp', modelBytes: this.modelBytes || null };
   }
 }

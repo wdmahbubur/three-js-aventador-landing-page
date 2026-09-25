@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
+import { checkUiFoundation } from './check-ui-browser.mjs';
 const port = 3177, base = `http://127.0.0.1:${port}`, output = path.resolve('public/diagnostics');
 await fs.mkdir(output, { recursive: true });
 const checks = [], runtimeErrors = [], requestsFailed = [];
@@ -60,9 +61,11 @@ try {
   await page.click('[data-action="lights"]');
   check('Headlight toggle disables the beam', (await state(page)).headlights.strength === 0);
   await page.click('[data-action="lights"]');
+  await page.click('[data-mode-tab="customize"]');
   await page.click('[data-finish="arancio"]');
   check('Paint finish switches', (await state(page)).finish === 'arancio');
   await page.click('[data-finish="rosso"]');
+  await page.click('[data-mode-tab="explore"]');
   await page.click('[data-action="explode"]');
   await page.waitForFunction(() => window.__REVUELTO__.getState().exploded > .99, { timeout: 30000 });
   check('Exploded view switches off headlight projection', (await state(page)).headlights.strength < .01);
@@ -91,6 +94,7 @@ try {
     if (width === 390) await screenshot(page, 'premium-mobile');
   }
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
+  await checkUiFoundation({ page, check, screenshot, state, seek, pause });
   await seek(page, 0);
   check('Reverse scrolling returns to an empty stage', (await state(page)).visibleParts === 0);
   // Exercise the real navigation and wait for observer delivery, not an arbitrary sleep.

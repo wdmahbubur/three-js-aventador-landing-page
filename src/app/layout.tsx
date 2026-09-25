@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Manrope, Barlow_Condensed } from 'next/font/google';
 import './globals.css';
 import './cabin.css';
+import './showroom.css';
 
 const body = Manrope({ subsets: ['latin'], display: 'swap', variable: '--font-body' });
 const display = Barlow_Condensed({ subsets: ['latin'], weight: ['500', '600', '700'], display: 'swap', variable: '--font-display' });

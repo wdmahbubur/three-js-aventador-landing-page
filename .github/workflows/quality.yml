@@ -1,7 +1,7 @@
 name: Landing page quality
 on:
   push:
-    branches: [master, premium-experience, cabin-experience]
+    branches: [master, premium-experience, cabin-experience, ui-foundation]
   pull_request:
     branches: [master]
 permissions:
@@ -12,7 +12,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-22.04
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:

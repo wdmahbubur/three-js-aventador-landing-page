@@ -50,9 +50,14 @@ export async function checkConfiguration({page,check,screenshot,state,seek,pause
   await page.click('.cabin-palette summary');
   check('Cabin drawer opens with an actual mouse click',await page.$eval('.cabin-palette',el=>el.open));
   check('Native cabin selectors are visible and hit-testable',await page.$$eval('[data-cabin-config]',els=>els.every(el=>{const r=el.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&el.contains(hit)})));
-  await page.focus('[data-cabin-config="accents"]');await page.keyboard.press('End');
-  await page.waitForFunction(()=>window.__REVUELTO__.getState().configuration.accents==='ivory',{timeout:5000});
-  check('Native keyboard selection changes the actual cabin material',(await state(page)).materials.bindings.accents[0].color==='#bfb2a0');
+  await page.focus('[data-cabin-config="accents"]');
+  check('Cabin select owns keyboard focus before selection',await page.evaluate(()=>document.activeElement.matches('[data-cabin-config="accents"]')));
+  await page.keyboard.press('Home');
+  await page.waitForFunction(()=>window.__REVUELTO__.getState().configuration.accents==='original',{timeout:15000});
+  check('Home returns the controlled cabin select to its first option',await page.$eval('[data-cabin-config="accents"]',el=>el.value==='original'));
+  await page.keyboard.press('End');
+  await page.waitForFunction(()=>window.__REVUELTO__.getState().configuration.accents==='ivory',{timeout:15000});
+  check('End selects the last cabin option and updates its actual material',(await state(page)).materials.bindings.accents[0].color==='#bfb2a0');
   await page.focus('.cabin-palette summary');await page.keyboard.press('Space');
   check('Cabin material drawer closes with the native Space key',await page.$eval('.cabin-palette',el=>!el.open));
   await page.focus('[data-action="cabin-left"]');await page.keyboard.down('Shift');await page.keyboard.press('Tab');await page.keyboard.up('Shift');

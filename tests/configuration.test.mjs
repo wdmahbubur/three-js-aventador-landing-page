@@ -35,3 +35,8 @@ const fakeControl = (closed = null, hidden = false) => ({ closest: selector => s
 test('closed disclosure descendants are excluded even when layout boxes remain', () => {const summary=fakeControl();const closed={querySelector:()=>summary};const select=fakeControl(closed);assert.equal(isVisibleFocusTarget(select,visibleStyle),false);});
 test('open disclosure controls and its summary can receive focus', () => {const summary=fakeControl();const closed={querySelector:()=>summary};summary.closest=()=>closed;assert.equal(isVisibleFocusTarget(fakeControl(),visibleStyle),true);summary.closest=s=>s.startsWith('details')?closed:null;assert.equal(isVisibleFocusTarget(summary,visibleStyle),true);});
 test('hidden, inert, missing and CSS-hidden focus targets are excluded', () => {assert.equal(isVisibleFocusTarget(null,visibleStyle),false);assert.equal(isVisibleFocusTarget(fakeControl(null,true),visibleStyle),false);assert.equal(isVisibleFocusTarget(fakeControl(),()=> 'hidden'),false);});
+
+import { configurationBoundary } from '../src/lib/configuration.mjs';
+test('cabin boundary keys select first/last whitelisted option deterministically', () => { assert.equal(configurationBoundary('accents','Home'),'original'); assert.equal(configurationBoundary('accents','End'),'ivory'); assert.equal(configurationBoundary('seats','End'),'nero'); });
+test('ordinary picker keys retain native handling', () => { for (const key of ['ArrowDown','ArrowUp','Enter',' ','Tab']) assert.equal(configurationBoundary('accents',key),null); });
+test('boundary keys cannot select unknown configuration scopes', () => { for (const key of ['__proto__','constructor','missing']) assert.equal(configurationBoundary(key,'End'),null); });

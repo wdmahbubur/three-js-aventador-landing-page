@@ -33,3 +33,10 @@ export function materialSlot(partKey, materialName, meshName = '') {
   if (materialName === 'Carbon' && !/^(Interior|Seat|Steering|Speedometer|Pedal)/.test(partKey)) return 'carbon';
   return null;
 }
+
+/** Deterministic Home/End navigation for the controlled cabin selects. */
+export function configurationBoundary(key, keyboardKey) {
+  if (!Object.hasOwn(CONFIG_OPTIONS, key) || !['Home', 'End'].includes(keyboardKey)) return null;
+  const options = CONFIG_OPTIONS[key];
+  return options[keyboardKey === 'Home' ? 0 : options.length - 1].id;
+}

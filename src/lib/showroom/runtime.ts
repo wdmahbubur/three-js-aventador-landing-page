@@ -282,7 +282,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
         const index = controls.indexOf(document.activeElement as HTMLButtonElement);
         event.preventDefault(); controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus({ preventScroll: true });
       }
-      if (['PageDown', 'PageUp', 'End', ' '].includes(event.key) && (event.target as HTMLElement)?.tagName !== 'BUTTON') event.preventDefault();
+      if (['PageDown', 'PageUp', 'End', ' '].includes(event.key) && !(event.target as HTMLElement)?.closest('button, select, input, textarea, summary')) event.preventDefault();
     } else if (read().cleanView && event.key === 'Tab') {
       event.preventDefault(); const canvas = host.querySelector('canvas'), button = root.querySelector<HTMLButtonElement>('[data-restore-ui]');
       (document.activeElement === canvas ? button : canvas)?.focus({ preventScroll: true });

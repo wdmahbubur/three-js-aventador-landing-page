@@ -81,4 +81,15 @@ export async function checkConfiguration({page,check,screenshot,state,seek,pause
   await page.click('[data-action="reset-build"]');
   check('Reset Build restores every default option',JSON.stringify((await state(page)).configuration)===JSON.stringify({paint:'rosso',paintFinish:'gloss',carbon:'satin',wheels:'graphite',calipers:'rosso',seats:'original',accents:'original'}));
   await page.click('#tab-explore');await screenshot(page,'phase2-explore');
+  await page.click('[data-detail-select="cockpit"]');
+  await page.waitForFunction(()=>!window.__REVUELTO__.getState().detailMoving,{timeout:45000});
+  await page.click('[data-action="detail-interior"]');
+  await page.waitForFunction(()=>window.__REVUELTO__.getState().cabin.mode==='inside',{timeout:45000});
+  check('Cockpit detail action enters the real cabin',(await state(page)).detail===null);
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(()=>window.__REVUELTO__.getState().cabin.mode==='exterior',{timeout:45000});
+  check('Contextual cabin exit restores a connected visible control',await page.evaluate(()=>{
+    const el=document.activeElement,r=el.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);
+    return el.dataset.action==='interior'&&!!hit&&el.contains(hit);
+  }));
 }

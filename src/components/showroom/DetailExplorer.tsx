@@ -25,7 +25,14 @@ export function DetailExplorer({state,send}: UIProps) {
       <div className="detail-card-heading"><span>DETAIL / {selected.number}</span><ActionButton action="clear-detail" send={send} className="icon-button" aria-label="Close detail view"><Icon name="close"/></ActionButton></div>
       <h3 id="detail-title">{selected.title}</h3><p>{selected.text}</p>
       {selected.action === 'customize-wheels' ? <button type="button" className="control-button" data-action="detail-customize-wheels" onClick={() => {send({type:'mode',mode:'customize'});send({type:'config-section',section:'wheels'});}}>CUSTOMIZE WHEELS <Icon/></button> :
-        selected.action && <ActionButton action={selected.action as 'doors' | 'lights' | 'interior'} send={send}>{selected.actionLabel} <Icon/></ActionButton>}
+        selected.action === 'interior' ? <button type="button" className="control-button" data-action="detail-interior" onClick={event => {
+          // The detail card unmounts on entry. Save a stable, visible return target instead.
+          const panel = event.currentTarget.closest<HTMLElement>('.workspace-panel');
+          const launcher = panel?.querySelector<HTMLButtonElement>('[data-action="interior"]');
+          if (panel && launcher) { panel.scrollTop = 0; launcher.focus({ preventScroll: true }); }
+          send({ type: 'interior' });
+        }}>ENTER INTERIOR <Icon/></button> :
+        selected.action && <ActionButton action={selected.action as 'doors' | 'lights'} send={send}>{selected.actionLabel} <Icon/></ActionButton>}
     </article>}
   </div>;
 }

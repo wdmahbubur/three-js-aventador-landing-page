@@ -3,6 +3,8 @@ export async function checkConfiguration({page,check,screenshot,state,seek,pause
   await page.setViewport({width:1440,height:900,deviceScaleFactor:1});await seek(page,1);
   check('All seven configurable material scopes are present',Object.values((await state(page)).materials.capabilities).every(Boolean));
   await page.evaluate(()=>{window.__phase2Canvas=document.querySelector('canvas')});
+  const qualityHit = () => page.$eval('select[data-quality]',el=>{const r=el.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return !!hit&&el.contains(hit)});
+  check('Rendering quality remains reachable above the desktop workspace',await qualityHit());
   await page.waitForFunction(()=>window.__REVUELTO__.getState().hotspots.filter(h=>h.visible).length>=2,{timeout:15000});
   check('Visible projected landmarks are interactive',await page.$$eval('[data-hotspot]:not([hidden])',els=>els.length>=2&&els.every(el=>{const r=el.getBoundingClientRect(),hit=document.elementFromPoint(r.x+r.width/2,r.y+r.height/2);return hit&&el.contains(hit)})));
   await page.click('[data-hotspot="headlights"]');
@@ -75,6 +77,7 @@ export async function checkConfiguration({page,check,screenshot,state,seek,pause
       check(`${section} step activates at ${width}x${height}`,(await state(page)).ui.configSection===section);
     }
     check(`Configuration fits without document overflow at ${width}x${height}`,await page.$eval('[data-reveal-controls]',el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.right<=innerWidth&&r.top>=0&&r.bottom<=innerHeight&&document.documentElement.scrollWidth<=innerWidth+1}));
+    check(`Rendering quality receives pointer input at ${width}x${height}`,await qualityHit());
     if(width===390){await page.$eval('#panel-customize',el=>{el.scrollTop=0});await page.click('[data-config-section="exterior"]');await pause(350);await screenshot(page,'phase2-mobile');}
   }
   await page.setViewport({width:1440,height:900,deviceScaleFactor:1});await seek(page,1);await page.click('#tab-customize');await page.$eval('#panel-customize',el=>{el.scrollTop=10000});

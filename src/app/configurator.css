@@ -53,3 +53,12 @@
   .cabin-palette{position:absolute;bottom:15px;right:15px;width:250px;margin:0}.cabin-palette[open]{bottom:48px}.detail-menu{grid-template-columns:1fr 1fr}.detail-menu>button{font-size:9px}.config-note{font-size:10px}
 }
 .experience[data-clean=true] .canvas-host,.experience[data-cabin=inside] .canvas-host,.experience[data-cabin=entering] .canvas-host,.experience[data-cabin=exiting] .canvas-host{inset:0!important}
+/* Keep rendering preferences reachable above, not underneath, the new side workspace. */
+@media(min-width:901px),(min-width:601px) and (orientation:landscape){
+  .experience[data-phase="7"] .quality-control{top:65px;right:4.2%}
+  .experience[data-phase="7"] .chapter-rail{visibility:hidden}
+}
+@media(max-height:500px) and (orientation:landscape){
+  .experience[data-phase="7"] .quality-control{top:15px;right:3%}
+  .experience[data-phase="7"] .scene-coordinate>span:last-child{display:none}
+}

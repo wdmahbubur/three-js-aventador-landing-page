@@ -1,6 +1,6 @@
 {
   "name": "revuelto-assembly",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,7 +11,7 @@
     "optimize": "node tools/optimize-assets.mjs",
     "predev": "npm run assets && npm run optimize",
     "dev": "next dev",
-    "prebuild": "npm run assets && npm run optimize && npm test && npm run verify:headlights && npm run verify:cabin",
+    "prebuild": "npm run assets && npm run optimize && npm test && npm run verify:headlights && npm run verify:cabin && npm run verify:configuration",
     "build": "next build",
     "build:vercel": "npm run prebuild && next build",
     "postbuild": "node tools/review-browser.mjs",
@@ -21,7 +21,8 @@
     "verify:headlights": "node tools/verify-headlights.mjs",
     "verify:cabin": "node tools/verify-cabin.mjs",
     "verify:browser": "node tools/verify-browser.mjs",
-    "check": "npm run test && npm run typecheck && npm run build"
+    "check": "npm run test && npm run typecheck && npm run build",
+    "verify:configuration": "node tools/verify-configuration.mjs"
   },
   "dependencies": {
     "gsap": "3.13.0",

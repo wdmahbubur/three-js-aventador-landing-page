@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import puppeteer from 'puppeteer-core';
 import chromium from '@sparticuz/chromium';
+import { checkConfiguration } from './check-configuration-browser.mjs';
 import { checkUiFoundation } from './check-ui-browser.mjs';
 const port = 3177, base = `http://127.0.0.1:${port}`, output = path.resolve('public/diagnostics');
 await fs.mkdir(output, { recursive: true });
@@ -95,6 +96,7 @@ try {
   }
   await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1 });
   await checkUiFoundation({ page, check, screenshot, state, seek, pause });
+  await checkConfiguration({ page, check, screenshot, state, seek, pause });
   await seek(page, 0);
   check('Reverse scrolling returns to an empty stage', (await state(page)).visibleParts === 0);
   // Exercise the real navigation and wait for observer delivery, not an arbitrary sleep.

@@ -13,7 +13,7 @@ export function Icon({ name = 'arrow' }: { name?: keyof typeof paths | 'orbit' }
   return <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">{name === 'orbit' ? <><ellipse cx="12" cy="12" rx="10" ry="4.5" transform="rotate(-30 12 12)"/><circle cx="12" cy="12" r="3"/></> : <path d={paths[name]}/>}</svg>;
 }
 export function ActionButton({ action, send, children, className = 'control-button', ...props }:
-  { action: Exclude<Action, { progress: number } | { mode: string } | { finish: string } | { quality: string }>['type']; send(action: Action): void; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  { action: Exclude<Action, { progress: number } | { mode: string } | { finish: string } | { quality: string } | { key: string } | { section: string } | { id: string }>['type']; send(action: Action): void; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
   // Parameterized commands use their own typed controls; these buttons send simple commands.
   return <button type="button" data-action={action} className={className} onClick={() => send({ type: action })} {...props}>{children}</button>;
 }

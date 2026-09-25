@@ -29,3 +29,9 @@ GitHub Actions uploads `premium-browser-review` with actual-model screenshots an
 ## Asset scope
 
 The interactive model is a standard Revuelto, not the custom body kit in the reference image. The support frame and assembly order are illustrative, not a factory simulation. See `THIRD_PARTY_NOTICES.md` and `docs/PREMIUM-UPGRADE.md`.
+
+## Frontend portfolio foundation
+
+The interface is now composed from React + TypeScript components, with typed commands and a cached per-instance UI store. After assembly, **Explore**, **Customize**, and **Photo** select separate workspaces. Explore retains doors/interior and all prior car controls. Customize uses the current three finishes; Reset Finish is separate from Replay. Photo provides camera composition and Clean View, with an Escape/Show Controls return path. Full customization, hotspots, image export, saved builds and sharing are later phases, not features claimed in this release.
+
+See `docs/UI-FOUNDATION.md` for ownership boundaries, lifecycle decisions and verification scope.

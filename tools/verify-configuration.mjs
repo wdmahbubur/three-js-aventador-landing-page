@@ -1,7 +1,7 @@
 import { MaterialConfigurator } from '../src/lib/material-configurator.mjs';
 import { HotspotProjector } from '../src/lib/hotspots.mjs';
 import { CONFIG_OPTIONS, DEFAULT_CONFIGURATION } from '../src/lib/configuration.mjs';
-/** Validate door extraction against the actual compressed asset before deployment. */
+/** Validate material isolation and landmark projection on the actual compressed asset. */
 import fs from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import * as THREE from 'three';
@@ -10,7 +10,6 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { AssemblyEngine } from '../src/lib/engine.mjs';
 import { DoorRig } from '../src/lib/doors.mjs';
 import { FINISHES } from '../src/lib/config.mjs';
-import { CABIN } from '../src/lib/cabin-math.mjs';
 if (!globalThis.ProgressEvent) globalThis.ProgressEvent = class extends Event { constructor(type, options = {}) { super(type); Object.assign(this, options); } };
 const manifest = JSON.parse(await fs.readFile('public/models/optimized/manifest.json', 'utf8'));
 const glb = await fs.readFile('public' + manifest.file), length = glb.readUInt32LE(12);
@@ -58,6 +57,8 @@ projector.setEnabled(true);
 const camera=new THREE.PerspectiveCamera(40,1000/650,.05,80);camera.position.set(5.4,2.1,7.5);camera.lookAt(0,.64,0);camera.updateProjectionMatrix();
 projector.update(camera,engine.carRoot);const front=structuredClone(projector.last);
 assert.ok(front.filter(x=>x.visible).length>=2,'Front view exposes actual clickable landmarks');assert.ok(front.every(x=>Number.isFinite(x.x)&&Number.isFinite(x.y)));assertions+=2;
+for (let i=0;i<front.length;i++) for(let j=i+1;j<front.length;j++) if(front[i].visible&&front[j].visible) assert.ok(Math.hypot(front[i].x-front[j].x,front[i].y-front[j].y)>=48,'Visible landmark targets must not overlap');
+assertions++;
 camera.position.set(-5,2,-7);camera.lookAt(0,.7,0);projector.update(camera,engine.carRoot);
 assert.equal(projector.last.find(x=>x.id==='headlights').visible,false,'Rear camera must not see a front-facing headlight marker');assertions++;
 const report={passed:true,assertions,triangles:before,groups:engine.parts.length,capabilities:configurator.capabilities(),frontMarkers:front,rearMarkers:projector.last,materialGroups:[...configurator.slots.keys()]};

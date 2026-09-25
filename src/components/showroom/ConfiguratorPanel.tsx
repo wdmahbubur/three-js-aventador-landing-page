@@ -45,8 +45,9 @@ export function ConfiguratorPanel({ state, send }: UIProps) {
 }
 
 export function CabinPalette({ state, send }: UIProps) {
-  return <details className="cabin-palette"><summary>CABIN FINISHES</summary><div>
+  return <details className="cabin-palette" style={{ pointerEvents: 'auto' }}><summary onKeyDown={event => { if (event.key === ' ') event.stopPropagation(); }}>CABIN FINISHES</summary><div>
     {(['seats', 'accents'] as const).map(key => <label key={key}>{labels[key]}<select data-cabin-config={key} value={state.configuration[key]}
+      onKeyDown={event => { if ([' ', 'Home', 'End', 'PageUp', 'PageDown'].includes(event.key)) event.stopPropagation(); }}
       disabled={state.cabin.mode !== 'inside' || !state.configCapabilities[key]} onChange={event => send({ type: 'configure', key, value: event.target.value })}>
       {CONFIG_OPTIONS[key].map(option => <option key={option.id} value={option.id}>{option.name}</option>)}
     </select></label>)}

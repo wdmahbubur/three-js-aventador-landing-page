@@ -27,3 +27,11 @@ test('seat inserts and cabin accents use different material scopes',()=>{
 test('exterior carbon can be changed without altering dashboard carbon',()=>{assert.equal(materialSlot('Front_part_4','Carbon'),'carbon');assert.equal(materialSlot('Interior_middle_parts','Carbon'),null);});
 test('replay and camera state do not discard a complete configuration',()=>{const s=createShowroomStore();const configuration=normalizeConfiguration({paint:'verde',wheels:'bronze',seats:'tan',paintFinish:'matte'});s.patch({configuration,finish:'verde'});s.patch({percent:0,mode:'explore',activeDetail:null});assert.equal(s.getSnapshot().configuration,configuration);assert.equal(createShowroomStore().getSnapshot().configuration.paint,'rosso');});
 test('every detail has a finite bounded camera and unique ID',()=>{assert.equal(new Set(DETAIL_IDS).size,5);for(const id of DETAIL_IDS){const s=DETAIL_CAMERAS[id];assert.ok([...s.position,...s.target,s.fov].every(Number.isFinite));assert.ok(s.fov>=35&&s.fov<=65);}});
+
+// Native disclosure and focus restoration must work without trapping keyboard users.
+import { isVisibleFocusTarget } from '../src/lib/showroom/focus.ts';
+const visibleStyle = () => 'visible';
+const fakeControl = (closed = null, hidden = false) => ({ closest: selector => selector.startsWith('details') ? closed : hidden ? {} : null, getClientRects: () => [{}] });
+test('closed disclosure descendants are excluded even when layout boxes remain', () => {const summary=fakeControl();const closed={querySelector:()=>summary};const select=fakeControl(closed);assert.equal(isVisibleFocusTarget(select,visibleStyle),false);});
+test('open disclosure controls and its summary can receive focus', () => {const summary=fakeControl();const closed={querySelector:()=>summary};summary.closest=()=>closed;assert.equal(isVisibleFocusTarget(fakeControl(),visibleStyle),true);summary.closest=s=>s.startsWith('details')?closed:null;assert.equal(isVisibleFocusTarget(summary,visibleStyle),true);});
+test('hidden, inert, missing and CSS-hidden focus targets are excluded', () => {assert.equal(isVisibleFocusTarget(null,visibleStyle),false);assert.equal(isVisibleFocusTarget(fakeControl(null,true),visibleStyle),false);assert.equal(isVisibleFocusTarget(fakeControl(),()=> 'hidden'),false);});

@@ -1,4 +1,5 @@
 import { flushSync } from 'react-dom';
+import { isVisibleFocusTarget } from './focus';
 import type { gsap as GSAP } from 'gsap';
 import type { ScrollTrigger as Trigger } from 'gsap/ScrollTrigger';
 import { DEFAULT_CONFIGURATION, changeConfiguration, normalizeConfiguration, validConfigOption } from '../configuration.mjs';
@@ -277,7 +278,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
     if (inside()) {
       if (event.key === 'Escape') { event.preventDefault(); engine?.setInterior(false); }
       if (event.key === 'Tab') {
-        const controls = [host.querySelector('canvas'), ...cabinOverlay.querySelectorAll<HTMLElement>('button:not(:disabled), summary, select:not(:disabled)')].filter((el): el is HTMLElement => el !== null && el.getClientRects().length > 0);
+        const controls = [host.querySelector('canvas'), ...cabinOverlay.querySelectorAll<HTMLElement>('button:not(:disabled), summary, select:not(:disabled)')].filter(el => isVisibleFocusTarget(el));
         const index = controls.indexOf(document.activeElement as HTMLButtonElement);
         event.preventDefault(); controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus({ preventScroll: true });
       }

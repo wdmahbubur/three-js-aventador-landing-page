@@ -34,6 +34,6 @@ export function HotspotLayer({state,send}: UIProps) {
   return <div className="hotspot-layer" data-hotspot-layer hidden={!enabled} aria-label="Vehicle landmarks">
     {DETAILS.map(detail => <button key={detail.id} type="button" className="hotspot" data-hotspot={detail.id}
       aria-label={`Explore ${detail.label}`} aria-pressed={state.activeDetail === detail.id}
-      onClick={() => send({type:'detail',id:detail.id as DetailId})}><span>{detail.number}</span><small>{detail.label}</small></button>)}
+      onClick={() => send({type:'detail',id:detail.id as DetailId})}><span>{detail.number}</span><small style={{ pointerEvents: 'none' }}>{detail.label}</small></button>)}
   </div>;
 }

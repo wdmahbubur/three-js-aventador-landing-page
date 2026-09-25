@@ -1,3 +1,4 @@
+import { CabinPalette } from './ConfiguratorPanel';
 import type { RefObject } from 'react';
 import { ActionButton, Icon, type UIProps } from './ui';
 export function CabinControls({ state, send, overlayRef }: UIProps & { overlayRef: RefObject<HTMLElement | null> }) {
@@ -9,7 +10,7 @@ export function CabinControls({ state, send, overlayRef }: UIProps & { overlayRe
       <p data-cabin-status>{seated ? 'Look around. Explore every detail.' : mode === 'exiting' ? 'Returning to the exterior view…' : 'Opening the doors and entering the cabin…'}</p></div>
       <ActionButton action="exit-interior" send={send} className="control-button cabin-exit">EXIT INTERIOR <Icon name="close"/></ActionButton>
     </div>
-    <div className="cabin-bottom"><p className="cabin-help">DRAG TO LOOK AROUND <span>·</span> ARROW KEYS / WASD <span>·</span> ESC TO EXIT</p>
+    <div className="cabin-bottom">{seated && <CabinPalette state={state} send={send}/>}<p className="cabin-help">DRAG TO LOOK AROUND <span>·</span> ARROW KEYS / WASD <span>·</span> ESC TO EXIT</p>
       <div className="cabin-presets" role="group" aria-label="Cabin viewpoints">
         <ActionButton action="cabin-left" send={send} disabled={!seated}>LEFT DOOR</ActionButton>
         <ActionButton action="cabin-front" send={send} disabled={!seated}>DASHBOARD</ActionButton>

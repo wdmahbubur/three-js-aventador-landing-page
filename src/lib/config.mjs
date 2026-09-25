@@ -15,7 +15,10 @@ export const MODEL = Object.freeze({
 export const FINISHES = Object.freeze([
   { id: 'rosso', name: 'Rosso / Carbon', color: '#b91c20', accent: '#ef4338' },
   { id: 'arancio', name: 'Arancio / Carbon', color: '#f06415', accent: '#ff8a39' },
-  { id: 'graphite', name: 'Graphite / Carbon', color: '#72757c', accent: '#bbc2cb' }
+  { id: 'graphite', name: 'Graphite / Carbon', color: '#72757c', accent: '#bbc2cb' },
+  { id: 'bianco', name: 'Bianco / Carbon', color: '#e1e0d8', accent: '#d6ceb9' },
+  { id: 'verde', name: 'Verde / Carbon', color: '#518239', accent: '#91b867' },
+  { id: 'blu', name: 'Blu / Carbon', color: '#244b83', accent: '#749fd7' }
 ]);
 export const CHAPTERS = Object.freeze([
   { id: 'origin', at: 0, label: 'The beginning', kicker: '00 / THE BEGINNING', title: 'EXTRAORDINARY.<br><span class="outline">FROM NOTHING.</span>', text: 'An icon is not born complete.<br>It comes together, one extraordinary detail at a time.' },

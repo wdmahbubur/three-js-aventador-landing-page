@@ -1,6 +1,7 @@
 import { useRef, type RefObject } from 'react';
-import { FINISHES } from '../../lib/config.mjs';
-import { MODES, modeAtKey, isFinish, type Mode } from '../../lib/showroom/state';
+import { ConfiguratorPanel } from './ConfiguratorPanel';
+import { DetailExplorer } from './DetailExplorer';
+import { MODES, modeAtKey, type Mode } from '../../lib/showroom/state';
 import { ActionButton, Icon, type UIProps } from './ui';
 
 export function ModeNavigation({ state, send, interiorLauncher }: UIProps & { interiorLauncher: RefObject<HTMLButtonElement | null> }) {
@@ -27,14 +28,10 @@ export function ModeNavigation({ state, send, interiorLauncher }: UIProps & { in
         <button ref={interiorLauncher} type="button" className="control-button cabin-enter" data-action="interior" disabled={!available || !state.cabin.available} onClick={() => send({ type: 'interior' })}>ENTER INTERIOR <Icon/></button>
         <ActionButton action="lights" send={send} className="icon-button" disabled={!available} aria-label="Headlights" title="Toggle headlights" aria-pressed={state.lights}><Icon name="light"/></ActionButton>
       </div>
+      <DetailExplorer state={state} send={send}/>
     </div>
     <div className="workspace-panel" role="tabpanel" id="panel-customize" aria-labelledby="tab-customize" hidden={state.mode !== 'customize'} tabIndex={0}>
-      <div className="workspace-caption"><span>EXTERIOR FINISH</span><small>Your finish stays with you as you explore.</small></div>
-      <div className="palette" role="group" aria-label="Presentation paint finish">{FINISHES.map(finish => <button key={finish.id} type="button" className="finish-option" data-finish={finish.id} aria-pressed={state.finish === finish.id} disabled={!available}
-        onClick={() => { if (isFinish(finish.id)) send({ type: 'finish', finish: finish.id }); }}>
-        <span className="paint-chip" style={{ background: finish.color }}/><span>{finish.name}</span><span className="paint-check" aria-hidden="true">{state.finish === finish.id ? '✓' : ''}</span>
-      </button>)}</div>
-      <div className="workspace-foot"><span data-finish-name>{FINISHES.find(f => f.id === state.finish)?.name}</span><ActionButton action="reset-finish" send={send} className="text-button" disabled={!available}>RESET FINISH <Icon name="replay"/></ActionButton></div>
+      <ConfiguratorPanel state={state} send={send}/>
     </div>
     <div className="workspace-panel" role="tabpanel" id="panel-photo" aria-labelledby="tab-photo" hidden={state.mode !== 'photo'} tabIndex={0}>
       <div className="workspace-caption"><span>FIND YOUR ANGLE.</span><small>Drag to compose. Clean view removes the interface.</small></div>

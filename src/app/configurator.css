@@ -1,0 +1,64 @@
+/* Phase two: one material workspace and projected landmarks; the car keeps the visual priority. */
+.hotspot-layer{position:absolute;inset:0;z-index:4;pointer-events:none;overflow:hidden}
+.hotspot{position:absolute;left:0;top:0;visibility:visible;pointer-events:auto;width:40px;height:40px;padding:0;border:1px solid #dbd4c77a;background:#0c1016e8;border-radius:50%;display:grid;place-items:center;color:#e6ded0;font:10px var(--mono);box-shadow:0 0 0 5px #0b0f1445}
+.hotspot:not([style]){visibility:hidden}.hotspot:hover,.hotspot[aria-pressed=true]{border-color:var(--gold);background:#42382be8}
+.hotspot small{display:none;position:absolute;left:47px;white-space:nowrap;background:#0c1016e8;border:1px solid #ffffff26;padding:8px 10px;font:10px var(--body)}
+.hotspot:hover small,.hotspot:focus-visible small{display:block}
+.experience[data-phase="7"][data-cabin=exterior][data-hotspots=true]:not([data-clean=true]) .canvas-host{z-index:2}
+.config-sections{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding-bottom:14px;border-bottom:1px solid #ffffff14}
+.config-sections button{min-height:44px;text-transform:capitalize;color:#969fab;font:11px var(--body);border-bottom:2px solid transparent}
+.config-sections button small{display:block;font:8px var(--mono);color:var(--gold);margin-bottom:5px}
+.config-sections button[aria-pressed=true]{color:var(--text);border-color:var(--gold);background:#b8aa9109}
+.config-field{padding:0;margin:18px 0;border:0;min-width:0}
+.config-field legend{width:100%;display:flex;justify-content:space-between;align-items:baseline;gap:8px;color:#dfded8;font-size:12px;line-height:1.5;margin-bottom:10px}
+.config-field legend>span{font:9px var(--mono);color:#a9a193;text-align:right}.config-field:disabled{opacity:.5}
+.config-options{display:flex;flex-wrap:wrap;gap:6px}.config-option{display:flex;align-items:center;justify-content:center;gap:8px;padding:8px 11px;min-height:40px;border:1px solid #ffffff21;font:10px var(--body);color:#c2c6cd;flex:1}
+.config-option[aria-pressed=true]{border-color:var(--gold);color:#f0ede7;background:#b8aa9113}.config-option:hover{background:#ffffff0a}
+.config-paints{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}.config-paints .config-option{flex-direction:column;gap:8px;min-height:64px;padding:10px 4px}
+.config-paints .paint-chip{width:24px;height:24px}.config-note{color:#949ca8;font:11px/1.7 var(--body);margin-top:16px}
+.config-footer{padding-top:12px;margin-top:12px;border-top:1px solid #ffffff16}.config-footer>span{font:9px var(--mono);color:var(--gold)}.config-footer>div{display:flex;justify-content:space-between;gap:12px;margin-top:4px}.config-footer .text-button{font-size:8px;gap:7px;min-height:34px}
+.config-review-title{font:500 24px var(--display);margin:18px 0 14px;letter-spacing:.02em}.build-summary{display:grid;gap:0}.build-summary>div{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid #ffffff12;padding:10px 0;font:11px/1.6 var(--body)}.build-summary dt{color:#9da6b1}.build-summary dd{text-align:right;color:#e2ded6}
+.detail-menu-heading{display:flex;align-items:center;justify-content:space-between;margin:16px 0 8px;border-top:1px solid #ffffff18;padding-top:9px}.detail-menu-heading>span{font:8px var(--mono);color:var(--gold);letter-spacing:.09em}.detail-menu-heading .text-button{font-size:8px;min-height:30px}
+.detail-menu{display:grid;grid-template-columns:1fr;gap:4px}.detail-menu>button{display:flex;align-items:center;text-align:left;gap:10px;min-height:38px;padding:8px 10px;background:#ffffff03;border:1px solid #ffffff14;color:#bdc4cd;font:11px var(--body)}
+.detail-menu>button small{color:var(--gold);font:8px var(--mono)}.detail-menu>button svg{margin-left:auto;width:13px;height:13px}.detail-menu>button[aria-pressed=true]{border-color:var(--gold);background:#b8aa9110;color:#eee9df}
+.detail-card{margin-top:14px;padding:14px;background:#b8aa9108;border:1px solid #b8aa9130}.detail-card-heading{display:flex;justify-content:space-between;align-items:center}.detail-card-heading>span{font:8px var(--mono);color:var(--gold);letter-spacing:.13em}.detail-card-heading .icon-button{height:30px;width:30px}.detail-card h3{font:500 27px/1.1 var(--display);margin:10px 0}.detail-card p{font:11px/1.8 var(--body);color:#aeb6c1}.detail-card>.control-button{margin-top:14px;min-height:38px;font-size:9px;text-transform:uppercase}
+.cabin-palette{margin:0 auto 12px;max-width:400px;text-align:left;border:1px solid #b8aa9140;background:#080c12dc;padding:0 12px}.cabin-palette summary{cursor:pointer;min-height:34px;font:9px/34px var(--mono);color:var(--gold)}.cabin-palette>div{display:flex;gap:12px;padding:8px 0 12px}.cabin-palette label{flex:1;font-size:10px;color:#bac1cd}.cabin-palette select{display:block;width:100%;height:36px;margin-top:6px;background:#10141b;border:1px solid #ffffff35;color:#efeadf;font:11px var(--body);padding:0 8px}
+/* Side panel on wide screens. No separate WebGL instance for configuration or detail views. */
+@media(min-width:901px),(min-width:601px) and (orientation:landscape){
+  .showroom-workspace.reveal-controls{top:145px;bottom:auto;left:auto;right:4.2%;transform:none;width:330px;max-height:calc(100dvh - 235px)}
+  .showroom-workspace .workspace-panel{max-height:calc(100dvh - 284px);overflow:auto;overscroll-behavior:contain;padding:15px}
+  .workspace-tabs [role=tab]{padding:0 8px;font-size:12px;gap:7px}.workspace-caption{display:block}.workspace-caption>small{display:block;margin-top:8px}
+  .workspace-actions{justify-content:flex-start;gap:6px}.workspace-actions .control-button{font-size:8px;padding:0 8px}.workspace-actions .icon-button{width:39px;height:39px}
+  .experience[data-phase="7"][data-cabin=exterior]:not([data-clean=true]) .canvas-host{right:calc(4.2% + 348px);bottom:50px}
+  .experience[data-phase="7"] .chapter-copy{top:20%;left:4.5%;pointer-events:none}.experience[data-phase="7"] .chapter-copy h2{font-size:38px}.experience[data-phase="7"] .chapter-description{font-size:10px;max-width:190px}
+  .experience[data-phase="7"][data-mode=customize] .chapter-copy,.experience[data-phase="7"]:not([data-detail=none]) .chapter-copy{visibility:hidden}
+  .inspect-hint{left:5%;right:calc(4.2% + 350px);bottom:125px}.showroom-workspace .workspace-note{font-size:10px;line-height:1.8}
+}
+@media(max-width:900px) and (orientation:portrait){
+  .showroom-workspace.reveal-controls{left:5%;right:5%;top:auto;bottom:99px;transform:none;width:auto;max-height:46dvh}
+  .showroom-workspace .workspace-panel{max-height:calc(46dvh - 44px);overflow:auto;overscroll-behavior:contain;padding:10px 12px}
+  .experience[data-phase="7"][data-cabin=exterior]:not([data-clean=true]) .canvas-host{bottom:calc(var(--workspace-height,240px) + 99px);right:0}
+  .experience[data-phase="7"] .chapter-copy{visibility:hidden}.experience[data-phase="7"] .scene-coordinate{top:25px}.experience[data-phase="7"] .quality-control{top:40px}.experience[data-phase="7"] .edition-tag{display:none}
+  .detail-menu{grid-template-columns:repeat(2,minmax(0,1fr));gap:5px}.detail-menu>button{font-size:10px;min-height:35px;padding:7px;gap:6px}
+  .detail-menu-heading{margin-top:10px;padding-top:7px}.config-field{margin:14px 0}.config-field legend{font-size:11px}.config-field legend>span{font-size:8px}
+  .config-sections{padding-bottom:6px}.config-sections button{min-height:38px;font-size:10px}.config-options{gap:5px}.config-option{font-size:10px;padding:7px;min-height:38px}.config-paints .config-option{min-height:53px;gap:6px;padding:8px 3px}.config-paints .paint-chip{width:20px;height:20px}
+  .config-footer .text-button{font-size:8px;min-height:33px}.detail-card h3{font-size:23px}.detail-card p{font-size:11px}.hotspot{width:32px;height:32px;font-size:8px}.hotspot small{font-size:9px;left:37px}
+  .inspect-hint{bottom:calc(var(--workspace-height,240px) + 106px);left:5%;right:5%;font-size:7px}
+}
+@media(max-height:500px) and (orientation:landscape){
+  .showroom-workspace.reveal-controls{top:60px;bottom:auto;right:3%;left:auto;width:300px;transform:none;max-height:calc(100dvh - 125px)}
+  .showroom-workspace .workspace-panel{max-height:calc(100dvh - 158px);padding:9px;overflow:auto}.workspace-actions{flex-wrap:wrap}.workspace-tabs [role=tab]{min-height:32px}
+  .experience[data-phase="7"][data-cabin=exterior]:not([data-clean=true]) .canvas-host{right:calc(3% + 314px);bottom:15px}
+  .experience[data-phase="7"] .chapter-copy{visibility:hidden}.experience[data-phase="7"] .scene-coordinate{top:20px}.experience[data-phase="7"] .quality-control{top:15px}.experience[data-phase="7"] .edition-tag{display:none}
+  .cabin-palette{position:absolute;bottom:15px;right:15px;width:250px;margin:0}.cabin-palette[open]{bottom:48px}.detail-menu{grid-template-columns:1fr 1fr}.detail-menu>button{font-size:9px}.config-note{font-size:10px}
+}
+.experience[data-clean=true] .canvas-host,.experience[data-cabin=inside] .canvas-host,.experience[data-cabin=entering] .canvas-host,.experience[data-cabin=exiting] .canvas-host{inset:0!important}
+/* Keep rendering preferences reachable above, not underneath, the new side workspace. */
+@media(min-width:901px),(min-width:601px) and (orientation:landscape){
+  .experience[data-phase="7"] .quality-control{top:65px;right:4.2%}
+  .experience[data-phase="7"] .chapter-rail{visibility:hidden}
+}
+@media(max-height:500px) and (orientation:landscape){
+  .experience[data-phase="7"] .quality-control{top:15px;right:3%}
+  .experience[data-phase="7"] .scene-coordinate>span:last-child{display:none}
+}

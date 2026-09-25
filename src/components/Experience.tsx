@@ -3,6 +3,7 @@ import { useShowroom } from '../hooks/useShowroom';
 import { FINISHES } from '../lib/config.mjs';
 import { isQuality } from '../lib/showroom/state';
 import { AssemblyStory } from './showroom/AssemblyStory';
+import { HotspotLayer } from './showroom/DetailExplorer';
 import { ModeNavigation } from './showroom/ModeNavigation';
 import { CabinControls } from './showroom/CabinControls';
 import { CreditsDialog } from './showroom/CreditsDialog';
@@ -18,7 +19,7 @@ export default function Experience() {
   const fallback = state.engine === 'error' || state.engine === 'deferred';
   const accent = FINISHES.find(finish => finish.id === state.finish)?.accent;
   return <div ref={root} className="experience" data-ui="react" data-engine={state.engine} data-phase={state.chapter} data-motion={state.reduced ? 'reduced' : 'full'}
-    data-quality={state.quality} data-inspect={state.inspecting} data-cabin={state.cabin.mode} data-mode={state.mode} data-clean={state.cleanView} data-fonts-ready={state.fontsReady}
+    data-quality={state.quality} data-inspect={state.inspecting} data-cabin={state.cabin.mode} data-mode={state.mode} data-clean={state.cleanView} data-fonts-ready={state.fontsReady} data-detail={state.activeDetail || 'none'} data-hotspots={state.hotspotsEnabled && state.mode === 'explore' && state.finished}
     style={{ '--accent': accent } as CSSProperties}>
     <a className="skip-link" href="#design" inert={inert}>Skip animation and explore the design</a>
     <header className="site-header" inert={inert}><a className="brand" href="#" onClick={event => { event.preventDefault(); send({ type: 'replay' }); }} aria-label="Revuelto experience, back to beginning"><Brand/></a>
@@ -26,7 +27,7 @@ export default function Experience() {
     </header>
     <main><section ref={track} className="assembly-track" id="assembly" aria-label="Scroll-driven Revuelto assembly"><div className="stage">
       <div className="stage-atmosphere" aria-hidden="true"><div className="wall-light wall-light-one"/><div className="wall-light wall-light-two"/><div className="horizon"/><div className="floor-lines"/></div>
-      <div ref={host} className="canvas-host" data-canvas-host aria-label="Interactive 3D showroom"/>
+      <div ref={host} className="canvas-host" data-canvas-host aria-label="Interactive 3D showroom"><HotspotLayer state={state} send={send}/></div>
       <div className="fallback-image" aria-hidden="true">{fallback && <><img src="/images/reference.webp" alt="" decoding="async" width={1440} height={810}/><span>STATIC VISUAL REFERENCE · 3D UNAVAILABLE</span></>}</div>
       <div className="stage-vignette" aria-hidden="true"/>
       <span className="edition-tag" aria-hidden="true">FORM / PRECISION / EMOTION</span><span className="stage-wordmark" aria-hidden="true">REVUELTO</span>

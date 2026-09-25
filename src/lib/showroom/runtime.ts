@@ -1,6 +1,10 @@
 import { flushSync } from 'react-dom';
+import { isVisibleFocusTarget } from './focus';
 import type { gsap as GSAP } from 'gsap';
 import type { ScrollTrigger as Trigger } from 'gsap/ScrollTrigger';
+import { DEFAULT_CONFIGURATION, changeConfiguration, normalizeConfiguration, validConfigOption } from '../configuration.mjs';
+import { isDetail } from '../details.mjs';
+import type { Configuration, ConfigSection, DetailId } from './state';
 import { CHAPTERS } from '../config.mjs';
 import { clamp01, chapterIndex, interval, normalizedScroll } from '../timeline.mjs';
 import { synchronizeScrollAnimation } from '../scroll-sync.mjs';
@@ -168,7 +172,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
     graphicsStarted = true; const generation = ++loadGeneration;
     const live = () => !disposed && generation === loadGeneration;
     store.patch({ engine: 'loading', status: 'Preparing the interactive showroom…' });
-    import('../cabin-renderer.mjs').then(({ AssemblyEngine }) => {
+    import('../configurator-renderer.mjs').then(({ AssemblyEngine }) => {
       if (!live()) return;
       const Renderer = AssemblyEngine as unknown as EngineConstructor;
       engine = new Renderer(host, { reduced,
@@ -176,15 +180,41 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
         onCabinState: state => { if (live()) syncCabin(state); },
         onReady: () => {
           if (!live()) return;
-          store.patch({ engine: 'ready' });
-          engine?.setProgress(current); engine?.setQuality(read().quality); engine?.setFinish(read().finish);
+          store.patch({ engine: 'ready', configCapabilities: Object.freeze(engine?.getConfigurationCapabilities() || {}) });
+          engine?.setProgress(current); engine?.setQuality(read().quality); engine?.setConfiguration(read().configuration);
           engine?.setLights(read().lights); engine?.setActive(true); engine?.emitCabinState();
           if (read().mode === 'photo') setInspect(true, true);
-          stateStatus();
-        }, onError: error => { if (live()) fail(error); }, onExitInspect: () => { if (live()) setInspect(false); }
+          syncHotspotVisibility(); stateStatus();
+        }, onError: error => { if (live()) fail(error); }, onExitInspect: () => { if (live()) setInspect(false); },
+        onDetailState: id => { if (live()) store.patch({ activeDetail: id, ...(id === null ? { inspecting: false } : {}) }); }
       });
+      engine.bindHotspots([...host.querySelectorAll<HTMLButtonElement>('[data-hotspot]')]);
       engine.setProgress(current); engine.setQuality(read().quality);
     }).catch(error => { if (live()) fail(error); });
+  }
+  function syncHotspotVisibility() {
+    const state = read();
+    engine?.setHotspotsEnabled(state.engine === 'ready' && state.finished && state.mode === 'explore' && state.hotspotsEnabled &&
+      state.cabin.mode === 'exterior' && !state.exploded && !state.cleanView && !state.creditsOpen);
+  }
+  const unsubscribeHotspots = store.subscribe(syncHotspotVisibility);
+  function configure(key: string, value: string) {
+    if (!ready() || !validConfigOption(key, value)) return;
+    const configuration = changeConfiguration(read().configuration, key, value) as Readonly<Configuration>;
+    store.patch({ configuration, finish: configuration.paint });
+    engine?.setConfiguration(configuration); announce('Build updated. Your choices stay with you while you explore.');
+  }
+  function showDetail(id: DetailId) {
+    if (!ready() || !read().finished || inside() || !isDetail(id)) return;
+    if (engine?.focusDetail(id)) { store.patch({ activeDetail: id, inspecting: true }); announce(`Exploring ${id}. Drag to adjust the view, or close the detail to return.`); }
+    else announce('Wait for the car to finish assembling before opening a detail.');
+  }
+  function chooseSection(section: ConfigSection) {
+    if (!['exterior', 'wheels', 'interior', 'review'].includes(section) || inside()) return;
+    store.patch({ configSection: section });
+    if (section === 'wheels') showDetail('wheels');
+    else if (section === 'interior') showDetail('cockpit');
+    else { engine?.clearDetail(); store.patch({ activeDetail: null, inspecting: false }); }
   }
   function send(action: Action) {
     if (disposed) return;
@@ -196,6 +226,19 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
       case 'credits': store.patch({ creditsOpen: true }); return;
       case 'close-credits': store.patch({ creditsOpen: false }); return;
       case 'retry': loadGeneration++; engine?.dispose(); engine = undefined; graphicsStarted = false; startGraphics(); return;
+      case 'configure': configure(action.key, action.value); return;
+      case 'config-section': chooseSection(action.section); return;
+      case 'detail': if (read().mode === 'explore') showDetail(action.id); return;
+      case 'toggle-hotspots': store.patch({ hotspotsEnabled: !read().hotspotsEnabled }); return;
+      case 'clear-detail': {
+        const id = read().activeDetail; engine?.clearDetail(); store.patch({ activeDetail: null, inspecting: false });
+        root.querySelector<HTMLButtonElement>(`[data-detail-select="${id}"]`)?.focus({ preventScroll: true }); return;
+      }
+      case 'reset-build': {
+        if (!ready()) return;
+        const configuration = normalizeConfiguration(DEFAULT_CONFIGURATION) as Readonly<Configuration>;
+        store.patch({ configuration, finish: configuration.paint }); engine?.setConfiguration(configuration); announce('All presentation options reset.'); return;
+      }
       case 'quality':
         if (!isQuality(action.quality)) return;
         store.patch({ quality: action.quality }); engine?.setQuality(action.quality);
@@ -204,7 +247,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
       case 'finish': case 'reset-finish': {
         const finish = action.type === 'finish' ? action.finish : 'rosso';
         if (!ready() || !isFinish(finish)) return;
-        store.patch({ finish }); engine?.setFinish(finish); announce(`Presentation finish: ${finish}.`); return;
+        configure('paint', finish); return;
       }
     }
     if (!ready() || !read().finished) return;
@@ -214,7 +257,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
       case 'lights': store.patch({ lights: !read().lights }); engine?.setLights(read().lights); break;
       case 'doors': case 'cabin-doors': engine?.setDoors(!read().cabin.doorsOpen); break;
       case 'interior':
-        cabinFocus = interiorLauncher; setInspect(false); setExplode(false);
+        cabinFocus = document.activeElement instanceof HTMLButtonElement ? document.activeElement : interiorLauncher; setInspect(false); setExplode(false);
         if (!engine?.setInterior(true)) announce('Interior is available after the car is fully assembled.'); break;
       case 'exit-interior': engine?.setInterior(false); break;
       case 'cabin-front': engine?.setCabinView('dashboard'); break;
@@ -227,6 +270,7 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
     }
   }
   document.addEventListener('keydown', event => {
+    if (event.key === 'Escape' && read().activeDetail && !inside() && !read().cleanView && !read().creditsOpen) { event.preventDefault(); event.stopImmediatePropagation(); send({ type: 'clear-detail' }); return; }
     if (event.key === 'Escape' && read().cleanView) { event.preventDefault(); event.stopImmediatePropagation(); setCleanView(false); }
   }, { signal, capture: true });
   document.addEventListener('keydown', event => {
@@ -234,11 +278,11 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
     if (inside()) {
       if (event.key === 'Escape') { event.preventDefault(); engine?.setInterior(false); }
       if (event.key === 'Tab') {
-        const controls = [host.querySelector('canvas'), ...cabinOverlay.querySelectorAll<HTMLButtonElement>('button:not(:disabled)')].filter((el): el is HTMLButtonElement | HTMLCanvasElement => el !== null);
+        const controls = [host.querySelector('canvas'), ...cabinOverlay.querySelectorAll<HTMLElement>('button:not(:disabled), summary, select:not(:disabled)')].filter(el => isVisibleFocusTarget(el));
         const index = controls.indexOf(document.activeElement as HTMLButtonElement);
         event.preventDefault(); controls[(index + (event.shiftKey ? -1 : 1) + controls.length) % controls.length]?.focus({ preventScroll: true });
       }
-      if (['PageDown', 'PageUp', 'End', ' '].includes(event.key) && (event.target as HTMLElement)?.tagName !== 'BUTTON') event.preventDefault();
+      if (['PageDown', 'PageUp', 'End', ' '].includes(event.key) && !(event.target as HTMLElement)?.closest('button, select, input, textarea, summary')) event.preventDefault();
     } else if (read().cleanView && event.key === 'Tab') {
       event.preventDefault(); const canvas = host.querySelector('canvas'), button = root.querySelector<HTMLButtonElement>('[data-restore-ui]');
       (document.activeElement === canvas ? button : canvas)?.focus({ preventScroll: true });
@@ -251,6 +295,8 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
   window.addEventListener('scroll', requestUpdate, { passive: true, signal });
   window.addEventListener('resize', requestUpdate, { passive: true, signal });
   window.addEventListener('pageshow', () => { ScrollTrigger?.refresh(); requestUpdate(); }, { signal });
+  const workspaceObserver = new ResizeObserver(([entry]) => root.style.setProperty('--workspace-height', `${Math.ceil(entry.target.getBoundingClientRect().height)}px`));
+  const workspace = root.querySelector('.showroom-workspace'); if (workspace) workspaceObserver.observe(workspace);
   const resizeObserver = new ResizeObserver(() => { ScrollTrigger?.refresh(); requestUpdate(); }); resizeObserver.observe(track);
   const stageObserver = new IntersectionObserver(([entry]) => { engine?.setActive(entry.isIntersecting || inside()); }); stageObserver.observe(track);
   // Editorial reveal classes are decorative only, never hide accessible content.
@@ -276,10 +322,10 @@ export function mountShowroom({ root, track, host, cabinOverlay, interiorLaunche
   const debugWindow = window as Window & { __REVUELTO__?: typeof debug };
   if (new URLSearchParams(location.search).has('debug') || root.hasAttribute('data-debug')) debugWindow.__REVUELTO__ = debug;
   return { send, dispose() {
-    disposed = true; loadGeneration++; abort.abort();
+    disposed = true; loadGeneration++; abort.abort(); unsubscribeHotspots();
     cancelAnimationFrame(frame); cancelAnimationFrame(settleFrame);
     if (idleTask !== undefined) { if ('cancelIdleCallback' in globalThis) cancelIdleCallback(idleTask); else clearTimeout(idleTask); }
-    resizeObserver.disconnect(); stageObserver.disconnect(); editorialObserver.disconnect(); trigger?.kill(); tween?.kill();
+    workspaceObserver.disconnect(); resizeObserver.disconnect(); stageObserver.disconnect(); editorialObserver.disconnect(); trigger?.kill(); tween?.kill();
     engine?.dispose(); document.documentElement.classList.remove('cabin-locked', 'photo-locked');
     if (debugWindow.__REVUELTO__ === debug) delete debugWindow.__REVUELTO__;
   } };
